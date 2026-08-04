@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>盛意旺公众号 · 自助客服（演示）</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<link rel="stylesheet" href="assets/css/base.css?v=rediag1">
+<link rel="stylesheet" href="assets/css/wechat.css">
+  <link rel="stylesheet" href="assets/annotation/product-annotation.css">
+</head>
+<body>
+
+<div class="stage">
+  <!-- ==================== 演示控制台（非产品界面） ==================== -->
+  <aside class="console">
+    <div class="console-title">演示控制台</div>
+    <p class="console-note">切换微信用户的绑定状态与商户后台数据状态，再点击底部菜单「商户服务 → 自助客服」查看对应分支。</p>
+
+    <div class="console-group">
+      <h4>微信用户绑定状态</h4>
+      <div class="scenario-list" id="bindList"></div>
+    </div>
+
+    <div class="console-group">
+      <h4>当前识别结果</h4>
+      <div class="console-merchant" id="consoleMerchant"></div>
+    </div>
+
+    <div class="console-group">
+      <h4>商户后台数据状态</h4>
+      <div class="scenario-list" id="scenarioList"></div>
+    </div>
+
+    <div class="console-group">
+      <h4>埋点日志（PRD 第 6 节）</h4>
+      <div class="track-log" id="trackLog"><div class="empty">暂无事件，开始操作后记录…</div></div>
+    </div>
+
+    <button class="console-reset" id="btnReset">重置演示</button>
+  </aside>
+
+  <!-- ==================== 手机演示区 ==================== -->
+  <main class="stage-main">
+    <div class="stage-head">
+      <a class="back" href="index.html">← 返回演示导航</a>
+      <h1>场景二 · 盛意旺公众号</h1>
+      <span class="tag">微信内 H5</span>
+    </div>
+
+    <div class="phone">
+      <div class="phone-screen" id="screen">
+
+        <!-- ---------------- 公众号会话 ---------------- -->
+        <section class="view is-active" data-view="home">
+          <div class="wx-top">
+            <div data-statusbar="light"></div>
+            <div class="wx-nav">
+              <button class="wx-back">‹</button>
+              <div class="wx-title">盛意旺</div>
+              <div class="wx-right">
+                <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="1.7"><circle cx="12" cy="8" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>
+              </div>
+            </div>
+          </div>
+
+          <div class="view-body wx-chat" id="wxChat">
+            <div class="wx-article">
+              <div class="wa-body">
+                <div class="wa-title">盛意旺收银台解决方案</div>
+                <div class="wa-desc">盛意旺收银台是一款专为线上场景量身定制的嵌入式支付解决方案。</div>
+              </div>
+            </div>
+
+            <div class="wx-date">7月20日 10:28</div>
+            <div class="wx-article">
+              <div class="wa-cover green">
+                <div class="c-kicker">集中收银场景下的</div>
+                <div class="c-main">门店分账<br>解决方案</div>
+                <div class="c-tags"><span>统一收单</span><span>自动分账</span><span>高效管理</span></div>
+              </div>
+              <div class="wa-body">
+                <div class="wa-title">集中收银分账解决方案，助力多门店商户经营！</div>
+                <div class="wa-desc">集中收银分账解决方案，助力多门店商户经营！</div>
+              </div>
+            </div>
+
+            <div class="wx-date">7月24日 16:40</div>
+            <div class="wx-article">
+              <div class="wa-cover mint">
+                <div class="c-kicker">说点有用的</div>
+                <div class="c-main">如何快速完成<br>商户入驻</div>
+                <div class="c-tags"><span>入驻答疑</span><span>报错处理</span></div>
+              </div>
+              <div class="wa-body">
+                <div class="wa-title">盛意旺商户入驻报错问题及解决方案指南</div>
+                <div class="wa-desc">商户入驻问题答疑</div>
+              </div>
+            </div>
+
+            <div class="wx-date">7月31日 09:10</div>
+            <div class="wx-article">
+              <div class="wa-cover blue">
+                <div class="c-kicker">自助服务助手上线</div>
+                <div class="c-main">资金未到账<br>10 秒自查</div>
+                <div class="c-tags"><span>风控</span><span>资质</span><span>结算</span><span>出款</span></div>
+              </div>
+              <div class="wa-body">
+                <div class="wa-title">未到账不用等客服！自助服务助手一键排查 5 大原因</div>
+                <div class="wa-desc">点击底部菜单「商户服务 → 自助客服」即可体验。</div>
+              </div>
+              <button class="wa-more" data-act="open-self-service">立即体验自助客服 <span>›</span></button>
+            </div>
+          </div>
+
+          <div class="wx-menu">
+            <div class="wx-submenu" id="wxSubmenu">
+              <button data-act="open-self-service">自助客服</button>
+              <button data-act="open-bind">绑定商户号</button>
+              <button data-act="open-agent">联系我们</button>
+            </div>
+            <div class="kb"><i>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#7a7a7a" stroke-width="1.8"><rect x="2.5" y="6.5" width="19" height="11" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8"/></svg>
+            </i></div>
+            <button class="wx-menu-item">品牌信息 <span class="m-mark">≡</span></button>
+            <button class="wx-menu-item">产品指引 <span class="m-mark">≡</span></button>
+            <button class="wx-menu-item" id="menuMerchant">商户服务 <span class="m-mark">≡</span>
+              
+  <span class="tooltip-icon">
+    <i class="bi bi-lightbulb-fill"></i>
+  </span>
+  <div class="product-tip">
+    <div class="product-tip-content">公众号一期在底部菜单新增「商户服务 → 自助客服」入口，点击进入微信内 H5；系统先按 OpenID 判断绑定状态与业务线，再决定进入完整功能、绑定引导或直接转人工。</div>
+  </div>
+            </button>
+          </div>
+        </section>
+
+        <!-- ---------------- 游客/未绑定：受限首页（4.5） ---------------- -->
+        <section class="view" data-view="h5-limited">
+          <div class="wx-top">
+            <div data-statusbar="light"></div>
+            <div class="wx-nav">
+              <button class="wx-back" data-act="to-chat">‹</button>
+              <div class="wx-title">自助服务</div>
+              <div class="wx-right"><span class="wx-capsule">··· ⊙</span></div>
+            </div>
+          </div>
+          <div class="view-body">
+            <div class="limited-banner">
+              <span class="lb-ico">🔒</span>
+              <span><b>当前为未绑定状态，功能受限
+                
+  <span class="tooltip-icon">
+    <i class="bi bi-lightbulb-fill"></i>
+  </span>
+  <div class="product-tip">
+    <div class="product-tip-content">未绑定/游客不阻断进入，降级展示常见问题与人工入口；点击诊断类按钮时才弹出绑定引导，避免入口处流失。</div>
+  </div>
+              </b>绑定商户号后可使用资金未到账自动诊断、结算配置自助修改等能力。</span>
+            </div>
+
+            <div class="asst-cards" style="margin-top:2px">
+              <button class="entry-card primary locked-card" data-act="need-bind">
+                <span class="ec-icon">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 8.5A2.5 2.5 0 0 1 5.5 6H18a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3z"/><path d="M3 9V7a2 2 0 0 1 2-2h9"/></svg>
+                </span>
+                <span><span class="ec-title">资金未到账</span>
+                <span class="ec-desc">需绑定商户号后使用</span></span>
+                <span class="lock-tag">未绑定</span>
+              </button>
+              <button class="entry-card secondary" data-act="open-agent">
+                <span class="ec-icon">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21 12a8 8 0 0 1-8 8H8l-4 3v-4.5A8 8 0 0 1 13 4a8 8 0 0 1 8 8z"/><path d="M9 11h8M9 15h5"/></svg>
+                </span>
+                <span><span class="ec-title">联系人工客服</span>
+                <span class="ec-desc">无需绑定，人工协助处理</span></span>
+              </button>
+            </div>
+
+            <div class="faq-block">
+              <h3>常见问题</h3>
+              <div class="faq-list" id="guestFaq"></div>
+            </div>
+
+            <div class="page-actions">
+              <button class="btn btn-primary" data-act="open-bind">绑定商户号，解锁全部功能</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ---------------- 绑定引导（4.1 / 4.5） ---------------- -->
+        <section class="view" data-view="bind">
+          <div class="wx-top">
+            <div data-statusbar="light"></div>
+            <div class="wx-nav">
+              <button class="wx-back" data-act="to-chat">‹</button>
+              <div class="wx-title">绑定商户号</div>
+              <div class="wx-right"><span class="wx-capsule">··· ⊙</span></div>
+            </div>
+          </div>
+          <div class="view-body">
+            <div class="bind-hero">
+              <div class="b-logo">盛</div>
+              <h2>绑定商户号，解锁自助服务</h2>
+              <p>绑定后微信与 App 登录态打通，<br>无需重复填写商户信息</p>
+            </div>
+
+            <div class="benefit-card">
+              <h3>绑定后可以做什么
+                
+  <span class="tooltip-icon">
+    <i class="bi bi-lightbulb-fill"></i>
+  </span>
+  <div class="product-tip">
+    <div class="product-tip-content">绑定引导页清晰展示绑定收益（自动诊断、自助修复、客服免重复描述），降低放弃率；绑定关系与 App 登录态打通，双端自动识别。</div>
+  </div>
+              </h3>
+              <div class="benefit"><span class="b-ico">1</span><span><b>资金未到账 10 秒自查</b><span class="d">自动排查风控、资质、结算、出款、分账</span></span></div>
+              <div class="benefit"><span class="b-ico">2</span><span><b>问题可自助修复</b><span class="d">资质更新、结算卡变更、自动提现开启一步到位</span></span></div>
+              <div class="benefit"><span class="b-ico">3</span><span><b>转人工免重复描述</b><span class="d">客服直接看到你的诊断报告</span></span></div>
+            </div>
+
+            <div class="oauth-step" id="oauthBox">
+              <div class="o-row done" data-step="oauth"><span class="o-ico">✓</span>已获取微信身份（OpenID：oR8kJ****Q2mX）</div>
+            </div>
+
+            <div class="form-card bind-form">
+              <h3>填写商户信息
+                
+  <span class="tooltip-icon">
+    <i class="bi bi-lightbulb-fill"></i>
+  </span>
+  <div class="product-tip">
+    <div class="product-tip-content">绑定需输入完整商户号（6-8 位数字）并通过商户预留手机号短信验证码校验，校验通过后服务端保存「微信 OpenID ↔ 商户号」关联关系，支持一个微信绑定多个商户号。</div>
+  </div>
+              </h3>
+              <div class="form-row">
+                <span class="f-label">商户号</span>
+                <input id="mchIdInput" inputmode="numeric" maxlength="8" placeholder="请输入 6-8 位商户号">
+              </div>
+              <div class="mch-found" id="mchFound"></div>
+              <div class="form-row">
+                <span class="f-label">预留手机号</span>
+                <span class="f-value" style="text-align:right" id="mchPhone">输入商户号后自动带出</span>
+              </div>
+              <div class="form-row">
+                <span class="f-label">短信验证码</span>
+                <input id="codeInput" inputmode="numeric" maxlength="6" placeholder="6 位验证码">
+                <button class="code-btn" id="btnCode" disabled>获取验证码</button>
+              </div>
+            </div>
+
+            <div class="bind-hint" id="bindHint">演示环境：可用商户号 88800213（夸父信息 · 盛意旺）、7712009（云栖餐饮管理 · 盛意旺）、620188（张记便利店 · 线下收单）；验证码固定 123456。</div>
+            <div class="bind-err" id="bindErr"></div>
+
+            <div class="page-actions">
+              <button class="btn btn-primary" id="btnBind">确认绑定</button>
+              <div class="asst-foot">绑定即表示同意《盛意旺自助服务协议》<br>绑定关系保存在服务端，可继续绑定多个商户号</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ---------------- 线下商户拦截（3.2） ---------------- -->
+        <section class="view" data-view="offline">
+          <div class="wx-top">
+            <div data-statusbar="light"></div>
+            <div class="wx-nav">
+              <button class="wx-back" data-act="to-chat">‹</button>
+              <div class="wx-title">自助服务</div>
+              <div class="wx-right"><span class="wx-capsule">··· ⊙</span></div>
+            </div>
+          </div>
+          <div class="view-body">
+            <div class="offline-wrap">
+              <div class="o-ico">!</div>
+              <h2>当前业务暂未开通自助服务
+                
+  <span class="tooltip-icon">
+    <i class="bi bi-lightbulb-fill"></i>
+  </span>
+  <div class="product-tip">
+    <div class="product-tip-content">一期仅支持盛意旺产品线。识别到线下收单等其他业务线时，提示暂未开通并自动转接人工客服，同时携带商户号与业务线信息。</div>
+  </div>
+              </h2>
+              <p>你的商户号 <b id="offlineMch"></b> 属于「线下收单」业务线，<br>自助诊断能力将在后续版本开放。</p>
+              <p style="margin-top:14px">正在为你转接人工客服…</p>
+              <div class="count">将在 <b id="offlineCount">3</b> 秒后自动跳转</div>
+            </div>
+            <div class="page-actions" style="padding-top:10px">
+              <button class="btn btn-primary" data-act="open-agent">立即转人工</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ---------------- 助手首页（已绑定 · 盛意旺） ---------------- -->
+        <section class="view" data-view="asst-home">
+          <div class="wx-top">
+            <div data-statusbar="light"></div>
+            <div class="wx-nav">
+              <button class="wx-back" data-act="to-chat">‹</button>
+              <div class="wx-title">自助服务
+                
+  <span class="tooltip-icon">
+    <i class="bi bi-lightbulb-fill"></i>
+  </span>
+  <div class="product-tip">
+    <div class="product-tip-content">已绑定盛意旺商户在公众号展示与 App 相同的快捷卡片与诊断链路，所有操作链接均为微信内 H5，不跳转外部浏览器。</div>
+  </div>
+              </div>
+              <div class="wx-right"><span class="wx-capsule">··· ⊙</span></div>
+            </div>
+          </div>
+          <div class="view-body" data-slot="asst-home"></div>
+        </section>
+
+        <!-- ---------------- 结算信息与结算规则 ---------------- -->
+        <section class="view" data-view="asst-settle">
+          <div class="wx-top">
+            <div data-statusbar="light"></div>
+            <div class="wx-nav">
+              <button class="wx-back" data-act="back-asst">‹</button>
+              <div class="wx-title">结算信息</div>
+              <div class="wx-right"><span class="wx-capsule">··· ⊙</span></div>
+            </div>
+          </div>
+          <div class="view-body" data-slot="asst-settle"></div>
+        </section>
+
+        <!-- ---------------- 诊断中 ---------------- -->
+        <section class="view" data-view="asst-diag">
+          <div class="wx-top">
+            <div data-statusbar="light"></div>
+            <div class="wx-nav"><div class="wx-title">智能诊断</div>
+              <div class="wx-right"><span class="wx-capsule">··· ⊙</span></div>
+            </div>
+          </div>
+          <div class="view-body" data-slot="asst-diag"></div>
+        </section>
+
+        <!-- ---------------- 诊断结果 ---------------- -->
+        <section class="view" data-view="asst-result">
+          <div class="wx-top">
+            <div data-statusbar="light"></div>
+            <div class="wx-nav">
+              <button class="wx-back" data-act="back-asst">‹</button>
+              <div class="wx-title">诊断报告</div>
+              <div class="wx-right"><span class="wx-capsule">··· ⊙</span></div>
+            </div>
+          </div>
+          <div class="view-body" data-slot="asst-result"></div>
+        </section>
+
+        <!-- ---------------- 自助修复功能页（由助手渲染） ---------------- -->
+        <section class="view" data-view="asst-page"></section>
+
+        <!-- ---------------- 微信客服会话 ---------------- -->
+        <section class="view agent-view" data-view="asst-agent">
+          <div class="wx-top">
+            <div data-statusbar="light"></div>
+            <div class="wx-nav">
+              <button class="wx-back" data-act="to-chat">‹</button>
+              <div class="wx-title">盛意旺客服</div>
+              <div class="wx-right"><span class="wx-capsule">··· ⊙</span></div>
+            </div>
+          </div>
+          <div class="view-body" data-slot="asst-agent"></div>
+          <div class="chat-input">
+            <div class="fake-input">演示环境，暂不支持输入</div>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#98a2b3" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
+          </div>
+        </section>
+
+        <div class="toast"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="assets/js/annotation.js?v=ro1"></script>
+<script src="assets/js/mock.js?v=payout2"></script>
+<script src="assets/js/assistant.js?v=rediag1"></script>
+<script src="assets/js/wechat.js?v=ro1"></script>
+  <script src="assets/annotation/product-annotation.js" defer></script>
+</body>
+</html>

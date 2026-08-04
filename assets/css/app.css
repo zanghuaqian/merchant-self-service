@@ -1,0 +1,394 @@
+/* ==========================================================================
+   盛意旺 App 场景样式（首页按真机截图复刻 + 底部导航「自助服务助手」入口）
+   ========================================================================== */
+
+/* ------------------------------ App 首页 ------------------------------ */
+
+.app-top {
+  flex: 0 0 auto;
+  background: linear-gradient(180deg, #1b8cff 0%, #2f9bff 100%);
+  color: #fff;
+  position: relative;
+  z-index: 3;
+}
+
+.app-title-row {
+  height: 46px;
+  display: flex;
+  align-items: center;
+  padding: 0 18px;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.app-title-row .plus {
+  margin-left: auto;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  border: 1.6px solid rgba(255, 255, 255, 0.85);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+  line-height: 1;
+  padding-bottom: 2px;
+}
+
+.app-home {
+  background: linear-gradient(180deg, #2f9bff 0%, #6bb6ff 12%, #dceeff 30%, #f2f4f9 46%, #f2f4f9 100%);
+  padding: 12px 12px 16px;
+}
+
+.app-card {
+  background: #fff;
+  border-radius: var(--r-lg);
+  box-shadow: 0 2px 14px rgba(20, 60, 120, 0.08);
+  margin-bottom: 12px;
+  overflow: hidden;
+  position: relative;
+}
+
+.metric-row { display: flex; padding: 16px 16px 14px; }
+.metric { flex: 1; }
+.metric .m-label { font-size: 12px; color: var(--text-3); display: flex; align-items: center; gap: 5px; }
+.metric .m-num { font-size: 30px; font-weight: 700; font-family: var(--font-num); margin-top: 6px; letter-spacing: -0.5px; }
+
+.card-divider { height: 1px; background: var(--line); margin: 0 16px; }
+
+.report-head {
+  display: flex;
+  align-items: center;
+  padding: 14px 16px 6px;
+}
+
+.report-head h3 { font-size: 16px; margin: 0; font-weight: 700; }
+
+.report-head .analysis {
+  margin-left: auto;
+  background: var(--brand);
+  color: #fff;
+  border-radius: 999px;
+  font-size: 11.5px;
+  padding: 5px 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 500;
+}
+
+.chart-wrap { padding: 4px 8px 6px; }
+.chart-wrap svg { width: 100%; display: block; }
+
+.broadcast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  font-size: 13px;
+  color: var(--text-1);
+  border-top: 1px solid var(--line);
+}
+
+.broadcast .bc-red { color: var(--danger); }
+.broadcast .bc-time { color: var(--text-3); font-size: 12px; }
+.broadcast .bc-arrow { margin-left: auto; display: flex; align-items: center; gap: 3px; color: #c6cdd8; }
+.broadcast .bc-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--danger); }
+
+.card-head {
+  display: flex;
+  align-items: center;
+  padding: 15px 16px 4px;
+}
+
+.card-head h3 { font-size: 16px; margin: 0; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+
+.card-head .link {
+  margin-left: auto;
+  font-size: 12.5px;
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.card-head .sub { font-size: 11.5px; color: var(--text-3); font-weight: 400; }
+.update-time { font-size: 11.5px; color: var(--text-3); padding: 4px 16px 8px; }
+
+.ledger-grid { display: flex; flex-wrap: wrap; padding: 4px 16px 18px; position: relative; z-index: 2; }
+.ledger-grid .lg-item { width: 50%; margin-top: 10px; }
+.ledger-grid .lg-label { font-size: 12px; color: var(--text-3); }
+.ledger-grid .lg-num { font-size: 22px; font-weight: 700; font-family: var(--font-num); margin-top: 4px; }
+
+.ledger-mark {
+  position: absolute;
+  right: 10px; bottom: 6px;
+  opacity: 0.5;
+  z-index: 1;
+}
+
+.trade-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.trade-row:first-of-type { border-top: none; }
+
+.trade-row .t-icon {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  background: #1677ff;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  font-weight: 600;
+  flex: 0 0 34px;
+}
+
+.trade-row .t-icon.ali { background: #1677ff; }
+.trade-row .t-icon.wx { background: #07c160; }
+.trade-row .t-main { font-size: 14px; }
+.trade-row .t-right { margin-left: auto; text-align: right; }
+.trade-row .t-amt { font-size: 15px; font-weight: 600; font-family: var(--font-num); }
+.trade-row .t-amt.minus { color: var(--danger); }
+.trade-row .t-state { font-size: 11.5px; color: var(--text-3); margin-top: 3px; }
+
+/* ------------------------------ 底部导航：首页/商城/助手(凸起)/消息/我的 ------------------------------ */
+
+.tabbar {
+  --tab-accent: #0094FF;
+  --tab-muted: #999999;
+  --tab-h: 56px;
+  --tab-lift: 16px;
+  --tab-safe: 20px;
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: 100%;
+  position: relative;
+  z-index: 6;
+  box-sizing: border-box;
+  height: calc(var(--tab-lift) + var(--tab-h) + var(--tab-safe));
+  padding: var(--tab-lift) 0 var(--tab-safe);
+  background: transparent;
+  overflow: visible;
+  display: block;
+}
+
+@supports (padding: env(safe-area-inset-bottom)) {
+  .tabbar { --tab-safe: max(20px, env(safe-area-inset-bottom, 0px)); }
+}
+
+.tabbar-surface {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(var(--tab-h) + var(--tab-safe));
+  pointer-events: none;
+  background: #fff;
+  border-top: 1px solid #edeff3;
+  -webkit-mask-image: radial-gradient(circle 30px at 50% 0, transparent 29.5px, #000 30.5px);
+  mask-image: radial-gradient(circle 30px at 50% 0, transparent 29.5px, #000 30.5px);
+}
+
+.tabbar-row {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: var(--tab-h);
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  align-items: end;
+  box-sizing: border-box;
+}
+
+.tabbar .tab {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  font-size: 10.5px;
+  line-height: 1.2;
+  color: var(--tab-muted);
+  padding: 0 0 8px;
+  margin: 0;
+  position: relative;
+  background: transparent;
+  border: 0;
+  box-sizing: border-box;
+}
+
+.tabbar .tab .tab-ico {
+  display: block;
+  position: relative;
+  width: 22px;
+  height: 22px;
+  font-style: normal;
+}
+
+.tabbar .tab .tab-ico svg {
+  display: block;
+  width: 22px;
+  height: 22px;
+}
+
+.tabbar .tab .tab-txt {
+  display: block;
+  white-space: nowrap;
+}
+
+.tabbar .tab.is-on { color: var(--tab-accent); }
+
+.tabbar .tab .t-dot {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f5222d;
+  font-style: normal;
+}
+
+.tabbar .tab .t-badge {
+  position: absolute;
+  top: -4px;
+  right: -10px;
+  background: #f5222d;
+  color: #fff;
+  font-size: 9px;
+  border-radius: 6px 6px 6px 1px;
+  padding: 0 4px;
+  line-height: 13px;
+  font-weight: 600;
+  font-style: normal;
+}
+
+/* 中间凸起「助手」：橙色圆钮 + 文案 */
+.tabbar .tab.tab-raised {
+  overflow: visible;
+}
+
+.tabbar .tab.tab-raised .raised-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #0094FF;
+  color: #fff;
+  margin-top: -16px;
+  margin-bottom: 2px;
+  box-shadow: 0 4px 8px rgba(0, 148, 255, 0.45);
+  font-style: normal;
+  flex-shrink: 0;
+}
+
+.tabbar .tab.tab-raised .raised-btn svg {
+  display: block;
+  width: 24px;
+  height: 24px;
+}
+
+.tabbar .tab.tab-raised:active .raised-btn {
+  -webkit-transform: scale(0.94);
+  transform: scale(0.94);
+}
+
+.tabbar .tab.tab-raised.is-on { color: var(--tab-accent); }
+
+/* 产品标注挂在底导外层，贴在中间「助手」右侧，不参与 Tab 排版 */
+.tabbar-tip {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  margin-left: 28px;
+  z-index: 8;
+  pointer-events: none;
+}
+
+.tabbar-tip .tooltip-icon {
+  pointer-events: auto;
+  margin-left: 0;
+  width: 22px;
+  height: 22px;
+}
+
+/* 底导占位页 */
+.stub-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 20px;
+  background: #f6f7f9;
+}
+
+.stub-card {
+  width: 100%;
+  max-width: 280px;
+  text-align: center;
+  background: #fff;
+  border-radius: 16px;
+  padding: 28px 20px;
+  box-shadow: 0 8px 24px rgba(16, 24, 40, 0.06);
+}
+
+.stub-ico {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  margin: 0 auto 14px;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  color: #fff;
+  font-size: 18px;
+}
+
+.stub-ico.shop { background: linear-gradient(135deg, #F5A623, #f08c00); }
+.stub-ico.msg { background: linear-gradient(135deg, #36cfc9, #13a8a8); }
+.stub-ico.me { background: linear-gradient(135deg, #5b8ff9, #3d6fd9); }
+
+.stub-card h2 { font-size: 18px; margin-bottom: 8px; }
+.stub-card p { font-size: 13px; color: var(--text-3); line-height: 1.7; }
+
+/* 助手页头部导航（App 内） */
+.asst-nav {
+  flex: 0 0 auto;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+}
+
+.asst-nav .nav-bar { color: var(--text-1); }
+.asst-nav .nav-bar .nav-left,
+.asst-nav .nav-bar .nav-right {
+  z-index: 6;
+}
+.asst-nav .nav-title {
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.asst-nav .nav-title .tooltip-icon {
+  pointer-events: auto;
+}
+.asst-nav .nav-left button {
+  font-size: 28px;
+  color: var(--text-1);
+  line-height: 1;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 8px 2px 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}

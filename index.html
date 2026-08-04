@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>商户自助服务助手（一期）· 交互演示</title>
+<link rel="stylesheet" href="assets/css/base.css">
+<style>
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 56px 24px 72px; }
+
+  .hero { display: flex; align-items: flex-end; gap: 18px; flex-wrap: wrap; }
+  .hero h1 { font-size: 34px; margin: 0; letter-spacing: -0.5px; line-height: 1.25; }
+  .hero .ver {
+    font-size: 12px; font-weight: 700; color: #fff;
+    background: var(--brand-grad); border-radius: 999px; padding: 5px 12px;
+    box-shadow: 0 6px 16px rgba(22, 119, 255, 0.28);
+  }
+  .hero p { flex: 1 1 100%; margin: 14px 0 0; color: var(--text-2); font-size: 15px; line-height: 1.8; }
+  .hero p b { color: var(--text-1); }
+
+  .kpis { display: flex; gap: 12px; flex-wrap: wrap; margin: 26px 0 34px; }
+  .kpi {
+    background: #fff; border: 1px solid #e6ebf3; border-radius: 14px;
+    padding: 14px 18px; box-shadow: var(--shadow-card); min-width: 168px;
+  }
+  .kpi .k-num { font-size: 24px; font-weight: 800; font-family: var(--font-num); color: var(--brand-strong); }
+  .kpi .k-txt { font-size: 12.5px; color: var(--text-2); margin-top: 4px; }
+
+  .scenes { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
+
+  .scene {
+    display: block; text-decoration: none; color: inherit;
+    background: #fff; border: 1px solid #e6ebf3; border-radius: 20px;
+    padding: 22px; box-shadow: var(--shadow-card);
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+    position: relative; overflow: hidden;
+  }
+  .scene:hover { transform: translateY(-4px); box-shadow: 0 18px 40px rgba(16, 40, 90, 0.13); border-color: #bcd6ff; }
+  .scene::after {
+    content: ""; position: absolute; right: -60px; top: -60px;
+    width: 170px; height: 170px; border-radius: 50%; opacity: 0.1;
+  }
+  .scene.app::after { background: var(--brand); }
+  .scene.wx::after { background: #07c160; }
+
+  .scene .s-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 700; border-radius: 999px; padding: 5px 11px; margin-bottom: 14px;
+  }
+  .scene.app .s-badge { background: var(--brand-soft); color: var(--brand-strong); }
+  .scene.wx .s-badge { background: #e6f9ee; color: #08915a; }
+
+  .scene h2 { font-size: 20px; margin: 0 0 10px; }
+  .scene .s-desc { font-size: 13.5px; color: var(--text-2); line-height: 1.8; margin-bottom: 16px; }
+
+  .flow { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
+  .flow span {
+    font-size: 11.5px; background: #f4f6fa; color: var(--text-2);
+    border-radius: 6px; padding: 4px 8px;
+  }
+
+  .scene .enter { font-size: 14px; font-weight: 700; color: var(--brand); display: flex; align-items: center; gap: 6px; }
+  .scene.wx .enter { color: #08915a; }
+
+  h3.sec { font-size: 17px; margin: 46px 0 16px; display: flex; align-items: center; gap: 10px; }
+  h3.sec::before { content: ""; width: 4px; height: 16px; border-radius: 2px; background: var(--brand); }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+  .item {
+    background: #fff; border: 1px solid #e9edf4; border-radius: 14px; padding: 16px;
+  }
+  .item h4 { font-size: 14px; margin: 0 0 8px; display: flex; align-items: center; gap: 7px; }
+  .item h4 em {
+    font-style: normal; font-size: 10.5px; font-weight: 700; color: var(--brand-strong);
+    background: var(--brand-soft); border-radius: 4px; padding: 2px 6px;
+  }
+  .item ul { margin: 0; padding-left: 17px; font-size: 12.5px; color: var(--text-2); line-height: 1.85; }
+
+  .tips {
+    margin-top: 34px; background: #fff; border: 1px dashed #c9d6ea; border-radius: 16px;
+    padding: 18px 20px; font-size: 13px; color: var(--text-2); line-height: 1.9;
+  }
+  .tips b { color: var(--text-1); }
+  .foot { margin-top: 34px; font-size: 12px; color: var(--text-3); line-height: 1.8; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <h1>商户自助服务助手 · 交互演示</h1>
+    <span class="ver">PRD V1.0 一期</span>
+    <p>覆盖「<b>资金未到账</b>」自助诊断全链路，双端各自完整可点：<b>盛意旺 App</b> 与 <b>盛意旺公众号</b>。
+      诊断引擎、解决方案配置、诊断快照、埋点事件均按 PRD 逻辑模拟，可用于评审、客服培训与灰度前走查。</p>
+  </header>
+
+  <div class="kpis">
+    <div class="kpi"><div class="k-num">-30%</div><div class="k-txt">「未到账」人工咨询量</div></div>
+    <div class="kpi"><div class="k-num">≥25%</div><div class="k-txt">自助解决率</div></div>
+    <div class="kpi"><div class="k-num">≤10s</div><div class="k-txt">发起到出结论耗时</div></div>
+    <div class="kpi"><div class="k-num">100%</div><div class="k-txt">转人工上下文携带率</div></div>
+  </div>
+
+  <div class="scenes">
+    <a class="scene app" href="app.html">
+      <span class="s-badge">场景一 · iOS / Android</span>
+      <h2>盛意旺 App</h2>
+      <div class="s-desc">复刻 App 首页，底导 5 Tab：首页、商城、助手（中间凸起）、消息、我的。基于登录 Token 静默识别商户，诊断后可跳转资质/结算卡/调单等修复页。</div>
+      <div class="flow">
+        <span>首页底导</span><span>助手首页</span><span>结算信息</span><span>并行诊断</span><span>诊断报告</span>
+        <span>自助修复页</span><span>反馈弹窗</span><span>转人工 + 快照</span>
+      </div>
+      <div class="enter">进入演示 →</div>
+    </a>
+
+    <a class="scene wx" href="wechat.html">
+      <span class="s-badge">场景二 · 微信内 H5</span>
+      <h2>盛意旺公众号</h2>
+      <div class="s-desc">复刻公众号会话与底部菜单「商户服务 → 自助客服」。按 OpenID 绑定态分流：游客受限首页 + 绑定引导（完整商户号 + 手机验证码）、多商户可切换、线下商户提示并自动转人工。</div>
+      <div class="flow">
+        <span>公众号菜单</span><span>绑定态判断</span><span>受限首页</span><span>图文绑定引导</span>
+        <span>商户号 + 验证码</span><span>多商户切换</span><span>诊断报告</span><span>微信内 H5 修复</span><span>客服 + 快照</span>
+      </div>
+      <div class="enter">进入演示 →</div>
+    </a>
+  </div>
+
+  <h3 class="sec">演示已覆盖的 PRD 要点</h3>
+  <div class="grid">
+    <div class="item">
+      <h4>商户身份识别 <em>4.1</em></h4>
+      <ul>
+        <li>App：登录 Token 静默获取商户号与产品线</li>
+        <li>公众号：完整商户号（6-8 位）+ 预留手机号验证码绑定，服务端保存 OpenID ↔ 商户号</li>
+        <li>一个微信可绑定多个商户号，默认使用上次查询的商户并支持切换</li>
+        <li>未绑定不阻断，降级至受限首页</li>
+      </ul>
+    </div>
+    <div class="item">
+      <h4>结算信息与结算规则 <em>新增</em></h4>
+      <ul>
+        <li>结算卡：类型（对公/对私）、账户名与卡号脱敏、归属银行</li>
+        <li>结算规则：结算周期、日切时间、自动提现、预留金额、出款服务类型（随心提/安心提/交班提）</li>
+        <li>与诊断结论联动：命中结算或卡异常时同步高亮</li>
+      </ul>
+    </div>
+    <div class="item">
+      <h4>诊断引擎 <em>4.2</em></h4>
+      <ul>
+        <li>风控 → 资质 → 结算配置 → 出款批次 → 分账，5 项并行查询</li>
+        <li>命中阻断异常即终止后续查询（明细标记「未执行」）</li>
+        <li>全部正常返回「未发现异常」+ 安抚文案</li>
+      </ul>
+    </div>
+    <div class="item">
+      <h4>解决方案配置 <em>4.3</em></h4>
+      <ul>
+        <li>资质过期 → 内嵌真实资质更新页（sass.shengpay.com）</li>
+        <li>卡异常 → 结算卡变更页（settlecard.shengpay.com）</li>
+        <li>批次出款失败（银行维护/渠道风控等）→ 提示失败原因并转人工</li>
+        <li>未开自动提现 → 知识库指引 + 结算设置</li>
+        <li>风控调单（有未处理记录）→ 跳转调单详情自助处理</li>
+        <li>合同未签约 → 跳转电子合同签约页完成签署</li>
+        <li>风控冻结 / 渠道异常 → 转人工并附原因</li>
+      </ul>
+    </div>
+    <div class="item">
+      <h4>反馈与转人工 <em>4.4</em></h4>
+      <ul>
+        <li>操作后底部弹出「已解决 / 未解决 + 原因」</li>
+        <li>转人工自动生成诊断快照（流水号、5 项结果、用户操作）</li>
+        <li>「其他问题」直接排队并同步商户信息</li>
+      </ul>
+    </div>
+    <div class="item">
+      <h4>游客与绑定引导 <em>4.5</em></h4>
+      <ul>
+        <li>点击诊断按钮下发绑定引导图文消息</li>
+        <li>输入完整商户号 → 带出预留手机号 → 短信验证码校验</li>
+        <li>绑定关系写入服务端，成功后自动进入完整功能</li>
+      </ul>
+    </div>
+    <div class="item">
+      <h4>异常与边界 <em>第 7 节</em></h4>
+      <ul>
+        <li>诊断超时（&gt;5 秒）→「网络繁忙，是否转人工？」</li>
+        <li>多异常并存 → 按阻断优先级展示，其余折叠</li>
+        <li>线下业务线 → 暂未开通并自动转人工</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="tips">
+    <b>使用说明</b><br>
+    1. 每个场景左侧为<b>演示控制台</b>（非产品界面）：可切换商户后台数据状态（资质过期、卡异常、批次出款失败、风控冻结、多异常、正常、超时）与公众号绑定状态，切换后重新发起诊断即可查看对应分支。<br>
+    2. 控制台底部实时输出<b>埋点日志</b>，对应 PRD 第 6 节指标口径。<br>
+    3. 页面中的<b>红色灯泡图标</b>为产品标注，鼠标悬停可在右侧查看该功能点的产品逻辑说明。<br>
+    4. 纯静态页面，双击 HTML 即可打开，无需构建与联网（图标字体缺失不影响功能）。
+  </div>
+
+  <div class="foot">
+    数据均为演示用 Mock，可用商户号：88800213 夸父信息（盛意旺）、7712009 云栖餐饮管理（盛意旺）、620188 张记便利店（线下收单）；短信验证码固定 123456<br>
+    对应文档：商户自助服务助手（一期）PRD V1.0 · 2026-07-31
+  </div>
+</div>
+</body>
+</html>
