@@ -68,6 +68,40 @@
     .rp-primary h3 { font-size: 14.5px; color: #a8071a; font-weight: 800; }
     .rp-primary p { font-size: 13px; color: #7a0916; line-height: 1.75; margin-top: 7px; }
 
+    .rp-mch-block {
+      margin: 12px 24px 0;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .rp-mch-block .mh {
+      background: #f7f9fc;
+      padding: 12px 14px;
+      font-size: 13.5px;
+      font-weight: 700;
+    }
+    .rp-mch-block .mh span { font-weight: 500; color: var(--text-3); font-size: 12px; margin-left: 8px; }
+    .rp-mch-block .mb { padding: 4px 14px 12px; }
+
+    .rp-log-item {
+      padding: 10px 0;
+      border-bottom: 1px dashed #eef1f6;
+      font-size: 13px;
+      line-height: 1.65;
+    }
+    .rp-log-item:last-child { border-bottom: 0; }
+    .rp-log-item .t { color: var(--text-3); font-size: 12px; }
+
+    .rp-unfin {
+      background: #fff7e6;
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin: 8px 0;
+      font-size: 13px;
+      line-height: 1.65;
+    }
+    .rp-unfin b { color: #8a5a00; }
+
     .rp-foot { text-align: center; font-size: 11.5px; color: var(--text-3); line-height: 1.8; margin-top: 18px; }
 
     .rp-error {
@@ -110,30 +144,140 @@
       var m = d.merchant;
       var s = d.settlement;
       var diag = d.diagnosis;
+      var multi = d.multi;
+      var processLog = d.processLog || (multi && multi.processLog) || [];
+      var unfinished = d.unfinished || (multi && multi.unfinished) || [];
+      var reports = (multi && multi.reports) || null;
+      var actionLinks = d.actionLinks || [];
 
       function kv(k, v, num) {
         return '<div class="rp-kv"><span class="k">' + k + '</span><span class="v' + (num ? ' num' : '') + '">' + v + '</span></div>';
       }
 
-      wrap.innerHTML =
-        '<div class="rp-head">' +
-          '<h1>商户诊断报告 · 客服工作台视图</h1>' +
-          '<p>由商户在' + (d.source === 'app' ? '盛意旺 App' : '微信公众号') +
-            '自助服务助手中发起转人工时自动生成，客服无需重复询问商户信息。</p>' +
-          '<div class="rp-tags"><span>报告编号 ' + rec.id + '</span>' +
-            '<span>生成于 ' + rec.createdAt + '</span>' +
-            '<span>有效期至 ' + rec.expireText + '</span></div>' +
-        '</div>' +
-        '<div class="rp-body">' +
+      function nodesHtml(nodes) {
+        return (nodes || []).map(function (n) {
+          return '<div class="rp-node ' + n.state + '">' +
+            '<span class="n-ico">' + (n.state === 'bad' ? '!' : n.state === 'skip' ? '–' : '✓') + '</span>' +
+            '<span><span class="n-name">' + n.name + '</span>' +
+            '<span class="n-val">' + n.value + '</span></span></div>';
+        }).join('');
+      }
+
+      function oneReportBlock(r) {
+        var dx = r.diagnosis || {};
+        return '<div class="rp-mch-block">' +
+          '<div class="mh">' + r.merchant.name +
+            '<span>商户号 ' + r.merchant.mchId + ' · ' + r.merchant.line + '</span></div>' +
+          '<div class="mb">' +
+            (dx.primary
+              ? '<div class="rp-primary" style="margin:10px 0"><h3>结论：' + dx.primary.summary + '</h3><p>' + dx.primary.detail + '</p></div>'
+              : '<div class="rp-kv"><span class="v">该商户 5 项排查均正常</span></div>') +
+            kv('诊断流水号', dx.traceId || '—', true) +
+            kv('诊断时间', dx.time || '—') +
+            (dx.abnormals && dx.abnormals.length
+              ? '<div style="margin-top:8px"><b style="font-size:12.5px;color:var(--text-2)">异常项</b>' +
+                dx.abnormals.map(function (a) {
+                  return '<div class="rp-unfin"><b>' + a.name + '</b>（' +
+                    (a.resolved ? '已自助' : (a.selfService ? '可自助·未完成' : '需人工')) + '）<br>' +
+                    a.summary + '</div>';
+                }).join('') + '</div>'
+              : '') +
+            '<div style="margin-top:6px">' + nodesHtml(dx.nodes) + '</div>' +
+          '</div></div>';
+      }
+
+      var merchantSec;
+      if (reports && reports.length > 1) {
+        merchantSec =
+          '<div class="rp-sec"><h2>商户信息（合并 ' + reports.length + ' 户）</h2>' +
+            reports.map(function (r) {
+              return kv(r.merchant.name, '商户号 ' + r.merchant.mchId + ' · ' + r.merchant.line, true);
+            }).join('') +
+            kv('接入渠道', d.source === 'app' ? '盛意旺 App' : '微信公众号') +
+            kv('转接原因', d.reason) +
+          '</div>';
+      } else {
+        merchantSec =
           '<div class="rp-sec"><h2>商户信息</h2>' +
             kv('商户号', m.mchId, true) +
             kv('商户名称', m.name) +
             kv('产品线', m.line) +
             kv('接入渠道', d.source === 'app' ? '盛意旺 App（登录态识别）' : '微信公众号（OpenID 绑定关系）') +
             kv('转接原因', d.reason) +
-          '</div>' +
+          '</div>';
+      }
 
-          (s ? '<div class="rp-sec"><h2>结算信息与结算规则</h2>' +
+      var diagSec;
+      if (reports && reports.length) {
+        diagSec =
+          '<div class="rp-sec"><h2>诊断明细（' + reports.length + ' 份合并）</h2></div>' +
+          reports.map(oneReportBlock).join('');
+      } else if (diag) {
+        diagSec =
+          (diag.primary
+            ? '<div class="rp-primary"><h3>诊断结论：' + diag.primary.summary + '</h3><p>' + diag.primary.detail + '</p></div>'
+            : '') +
+          '<div class="rp-sec"><h2>诊断明细</h2>' +
+            kv('诊断流水号', diag.traceId, true) +
+            kv('诊断时间', diag.time) +
+            (diag.userAction ? kv('商户已执行操作', diag.userAction) : '') +
+            (diag.feedback ? kv('商户反馈', diag.feedback) : '') +
+            '<div style="margin-top:6px">' + nodesHtml(diag.nodes) + '</div>' +
+          '</div>';
+      } else {
+        diagSec =
+          '<div class="rp-sec"><h2>诊断明细</h2>' +
+            '<div class="rp-kv"><span class="v">商户未执行自助诊断即转接人工（如「其他问题」入口），仅同步商户档案与结算信息。</span></div>' +
+          '</div>';
+      }
+
+      var processSec = processLog.length
+        ? '<div class="rp-sec"><h2>自助处理过程记录（' + processLog.length + '）</h2>' +
+            processLog.map(function (p) {
+              return '<div class="rp-log-item"><div><b>' + (p.name || '自助处理') + '</b> · ' + (p.action || '') +
+                '</div><div class="t">' + (p.mchName || p.mchId || '') + ' · ' + (p.time || '') + '</div></div>';
+            }).join('') +
+          '</div>'
+        : '';
+
+      var unfinishedSec = unfinished.length
+        ? '<div class="rp-sec"><h2>遗留未完成异常（' + unfinished.length + '）</h2>' +
+            unfinished.map(function (u) {
+              return '<div class="rp-unfin"><b>' + u.name + '</b>（' + (u.mchName || u.mchId) + '）' +
+                (u.selfService ? ' · 可自助未完成' : ' · 需人工') +
+                '<br>' + (u.summary || '') +
+                (u.detail ? '<br>' + u.detail : '') + '</div>';
+            }).join('') +
+          '</div>'
+        : (d.source === 'cs'
+          ? ''
+          : '<div class="rp-sec"><h2>遗留未完成异常</h2>' +
+              '<div class="rp-kv"><span class="v">无遗留异常（或商户未发起诊断）</span></div></div>');
+
+      var actionSec = actionLinks.length
+        ? '<div class="rp-sec"><h2>已生成的商户处理链接（' + actionLinks.length + '）</h2>' +
+            actionLinks.map(function (a) {
+              return '<div class="rp-log-item"><div><b>' + a.name + '</b> · ' + (a.mchName || a.mchId) +
+                '</div><div class="t" style="word-break:break-all;color:#1552c4">' + a.link + '</div></div>';
+            }).join('') +
+          '</div>'
+        : '';
+
+      wrap.innerHTML =
+        '<div class="rp-head">' +
+          '<h1>商户诊断报告 · 客服工作台视图' +
+            (reports && reports.length > 1 ? '（多商户合并）' : '') + '</h1>' +
+          '<p>' + (d.source === 'cs'
+            ? '由客服工作台代查「资金未到账」时生成，含各商户诊断结论与可下发给商户的处理链接。'
+            : ('由商户在' + (d.source === 'app' ? '盛意旺 App' : '微信公众号') +
+              '自助服务助手中发起转人工时自动生成，含自助处理过程与未完成异常，客服无需重复询问。')) + '</p>' +
+          '<div class="rp-tags"><span>报告编号 ' + rec.id + '</span>' +
+            '<span>生成于 ' + rec.createdAt + '</span>' +
+            '<span>有效期至 ' + rec.expireText + '</span></div>' +
+        '</div>' +
+        '<div class="rp-body">' +
+          merchantSec +
+          (s && !(reports && reports.length > 1) ? '<div class="rp-sec"><h2>结算信息与结算规则</h2>' +
             kv('结算卡', s.cardType + '账户 · ' + s.accountName) +
             kv('结算卡号', s.cardNo + '（' + s.bank + '）', true) +
             kv('结算周期 / 日切', s.cycle + ' · 每日 ' + s.cutoff) +
@@ -141,31 +285,13 @@
             kv('预留金额', s.reserve + ' 元', true) +
             kv('出款服务类型', s.payoutService + '（' + s.payoutServiceDesc + '）') +
           '</div>' : '') +
-
-          (diag
-            ? (diag.primary
-                ? '<div class="rp-primary"><h3>诊断结论：' + diag.primary.summary + '</h3><p>' + diag.primary.detail + '</p></div>'
-                : '') +
-              '<div class="rp-sec"><h2>诊断明细</h2>' +
-                kv('诊断流水号', diag.traceId, true) +
-                kv('诊断时间', diag.time) +
-                (diag.userAction ? kv('商户已执行操作', diag.userAction) : '') +
-                (diag.feedback ? kv('商户反馈', diag.feedback) : '') +
-                '<div style="margin-top:6px">' +
-                  diag.nodes.map(function (n) {
-                    return '<div class="rp-node ' + n.state + '">' +
-                      '<span class="n-ico">' + (n.state === 'bad' ? '!' : n.state === 'skip' ? '–' : '✓') + '</span>' +
-                      '<span><span class="n-name">' + n.name + '</span>' +
-                      '<span class="n-val">' + n.value + '</span></span></div>';
-                  }).join('') +
-                '</div>' +
-              '</div>'
-            : '<div class="rp-sec"><h2>诊断明细</h2>' +
-                '<div class="rp-kv"><span class="v">商户未执行自助诊断即转接人工（如「其他问题」入口），仅同步商户档案与结算信息。</span></div>' +
-              '</div>') +
+          diagSec +
+          processSec +
+          unfinishedSec +
+          actionSec +
         '</div>' +
-        '<div class="rp-note">演示说明：本页模拟「诊断报告独立链接」方案。真实实现中报告数据存于服务端，链接携带一次性令牌与有效期，' +
-          '客服在一洽工作台点击图文消息即可打开；商户侧不可见客服专属链接。</div>' +
+        '<div class="rp-note">演示说明：本页模拟「诊断报告独立链接」方案。多商户场景下多份诊断合并为一份完整报告；' +
+          '真实实现中报告数据存于服务端，链接携带一次性令牌与有效期，经 hjUserData 地址字段同步给客服。</div>' +
         '<div class="rp-foot">商户自助服务助手（一期）· 演示环境<br>报告内容按脱敏规则展示，不含完整卡号与证件信息</div>';
     })();
   </script>

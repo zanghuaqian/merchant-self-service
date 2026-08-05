@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>客服工作台 · 资金未到账诊断</title>
+  <link rel="stylesheet" href="assets/css/base.css?v=abn1">
+  <link rel="stylesheet" href="assets/css/cs-diagnose.css?v=3">
+</head>
+<body class="cs-body">
+  <div class="cs-layout">
+    <aside class="cs-side">
+      <div class="logo">盛意旺客服工作台
+        <em>资金未到账 · 自动诊断（客服侧）</em>
+      </div>
+      <nav class="cs-nav">
+        <a class="is-on" href="cs-diagnose.html">资金未到账诊断</a>
+        <a href="report.html" target="_blank" rel="noopener">诊断报告查看</a>
+        <a href="index.html">返回演示首页</a>
+        <a href="wechat.html">公众号商户端</a>
+        <a href="app.html">App 商户端</a>
+      </nav>
+      <div class="hint">
+        客服可输入商户号或手机号查询商户，多选后生成诊断报告。原商户自助入口在此转为「处理链接」，可通过复制或短信发给商户自行处理。
+      </div>
+    </aside>
+
+    <main class="cs-main">
+      <header class="cs-head">
+        <div>
+          <h1>资金未到账 · 自动诊断</h1>
+          <p>查询商户 → 多选诊断 → 下发处理链接。演示数据与商户端共用 Mock 诊断引擎。</p>
+        </div>
+        <span class="agent-tag">客服席位 · Demo</span>
+      </header>
+
+      <section class="cs-card">
+        <h2>1. 查询商户</h2>
+        <div class="cs-tabs">
+          <button type="button" class="cs-tab is-on" data-mode="mch">按商户号</button>
+          <button type="button" class="cs-tab" data-mode="phone">按手机号</button>
+        </div>
+
+        <div id="panelMch">
+          <div class="cs-form-row">
+            <input id="mchInput" inputmode="numeric" maxlength="8" placeholder="输入 6-8 位商户号，如 88800213">
+            <button type="button" class="cs-btn cs-btn-primary" id="btnSearchMch">查询</button>
+            <button type="button" class="cs-btn cs-btn-ghost" id="btnDemoMch">填入演示商户</button>
+          </div>
+        </div>
+
+        <div id="panelPhone" style="display:none">
+          <div class="cs-form-row">
+            <input id="phoneInput" inputmode="numeric" maxlength="11" placeholder="输入预留手机号，如 13812346621">
+            <button type="button" class="cs-btn cs-btn-primary" id="btnSearchPhone">查询关联商户</button>
+            <button type="button" class="cs-btn cs-btn-ghost" id="btnDemoPhone">填入演示手机号</button>
+          </div>
+        </div>
+        <div class="cs-err" id="searchErr"></div>
+      </section>
+
+      <section class="cs-card">
+        <h2>2. 选择演示诊断场景</h2>
+        <p class="cs-sc-tip">切换不同异常样例，查看客服侧报告与处理链接的展示差异（可自助 → 处理链接；不可自助 → 需客服跟进）。</p>
+        <div class="cs-sc-grid" id="scenarioGrid"></div>
+        <div class="cs-sc-current" id="scenarioCurrent"></div>
+      </section>
+
+      <section class="cs-card">
+        <h2>3. 选择商户并诊断</h2>
+        <div class="cs-ok" id="pickHint" style="margin-top:0;margin-bottom:10px">请先完成上方查询</div>
+        <div class="cs-pick-list" id="pickList"></div>
+
+        <div class="cs-toolbar" id="diagToolbar" style="display:none">
+          <div class="left">
+            <button type="button" class="cs-btn cs-btn-ghost cs-btn-sm" id="btnSelectAll">全选</button>
+            <button type="button" class="cs-btn cs-btn-ghost cs-btn-sm" id="btnSelectNone">清空</button>
+          </div>
+          <button type="button" class="cs-btn cs-btn-primary" id="btnDiagnose">生成诊断报告</button>
+        </div>
+      </section>
+
+      <section class="cs-card">
+        <h2>4. 诊断结果与处理链接</h2>
+        <div id="resultBox"></div>
+        <div class="cs-report-bar" id="reportBar" style="display:none">
+          <div class="info" id="reportInfo"></div>
+          <div class="acts">
+            <button type="button" class="cs-btn cs-btn-ghost cs-btn-sm" id="btnCopyAllLinks">复制全部处理链接</button>
+            <button type="button" class="cs-btn cs-btn-ghost cs-btn-sm" id="btnCopyReport">复制报告链接</button>
+            <button type="button" class="cs-btn cs-btn-primary cs-btn-sm" id="btnOpenReport">打开完整报告</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="cs-toast" id="csToast"></div>
+
+  <script src="assets/js/mock.js?v=settle2"></script>
+  <script src="assets/js/cs-diagnose.js?v=3"></script>
+</body>
+</html>

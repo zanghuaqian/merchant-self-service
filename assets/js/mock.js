@@ -17,6 +17,7 @@ window.MSS = (function () {
       name: '夸父信息',
       mchId: '88800213',
       phone: '138****6621',
+      phoneRaw: '13812346621',
       line: '盛意旺',
       lineCode: 'SYW',
       selfServiceEnabled: true,
@@ -39,7 +40,8 @@ window.MSS = (function () {
       key: 'syw2',
       name: '云栖餐饮管理',
       mchId: '7712009',
-      phone: '159****3082',
+      phone: '138****6621',
+      phoneRaw: '13812346621',
       line: '盛意旺',
       lineCode: 'SYW',
       selfServiceEnabled: true,
@@ -63,6 +65,7 @@ window.MSS = (function () {
       name: '张记便利店',
       mchId: '620188',
       phone: '137****4408',
+      phoneRaw: '13712344408',
       line: '线下收单',
       lineCode: 'OFFLINE',
       selfServiceEnabled: false,
@@ -93,6 +96,18 @@ window.MSS = (function () {
       if (list[i].mchId === String(mchId).trim()) return list[i];
     }
     return null;
+  }
+
+  /** 按预留手机号查找关联商户（演示：13812346621 关联 2 个盛意旺商户） */
+  function findByPhone(phone) {
+    var raw = String(phone || '').replace(/\D/g, '');
+    return merchantList().filter(function (m) { return m.phoneRaw === raw; });
+  }
+
+  function maskPhone(phone) {
+    var raw = String(phone || '').replace(/\D/g, '');
+    if (raw.length < 7) return phone || '';
+    return raw.slice(0, 3) + '****' + raw.slice(-4);
   }
 
   /**
@@ -157,24 +172,24 @@ window.MSS = (function () {
       url: 'https://sass.shengpay.com/com-pages-web/profits/v1/profits?ticket=BC_766967498100416512'
     },
     settlement: {
-      type: 'guide',
-      label: '查看开启指引',
-      page: 'guide',
-      title: '如何开启自动提现？',
+      type: 'settle_settings',
+      label: '去结算设置',
+      page: 'settle_settings',
+      title: '结算设置',
+      mpPath: 'pages/settle/settings',
       question: '如何开启自动提现？',
       guide: [
-        '打开盛意旺「我的 → 结算管理 → 结算设置」。',
-        '找到「自动提现」开关，点击开启。',
-        '选择自动提现时间（每日 10:00 / 实时到账），并核对结算周期与日切时间。',
-        '保存后次日生效；当前余额可在结算设置页点击「立即提现」手动出款。'
+        '打开盛意旺「我的 → 账户余额 → 我的账户 → 结算设置」。',
+        '打开「是否自动结算」开关，并确认日切时间与留存金额。',
+        '保存后次日生效；关闭自动结算时可在结算设置页发起自助结算。'
       ]
     },
-    /** 结算卡异常：可自助，跳转结算卡变更页 */
+    /** 结算卡异常：可自助，跳转结算卡信息变更申请页 */
     payout_card: {
-      type: 'link',
+      type: 'card_change',
       label: '修改结算卡',
       page: 'card',
-      title: '结算卡变更',
+      title: '结算卡信息变更申请',
       url: 'https://settlecard.shengpay.com/settle-card/apply?ticket=56941366eaf2444b87e3b95ff4d796e6'
     },
     /** 批次出款失败（渠道/银行原因）：不可自助，提示失败原因并转人工 */
@@ -185,10 +200,10 @@ window.MSS = (function () {
     },
     /** 兼容旧 solutionKey */
     card: {
-      type: 'link',
+      type: 'card_change',
       label: '修改结算卡',
       page: 'card',
-      title: '结算卡变更',
+      title: '结算卡信息变更申请',
       url: 'https://settlecard.shengpay.com/settle-card/apply?ticket=56941366eaf2444b87e3b95ff4d796e6'
     },
     /** 风控冻结：不可自助，转人工 */
@@ -582,10 +597,17 @@ window.MSS = (function () {
 
     /** 绑定：微信 OpenID ↔ 商户号，写入服务端并置为当前商户 */
     bind: function (mchId) {
+      return this.bindMany([mchId], mchId);
+    },
+
+    /** 一次绑定多个商户号（手机号验证通过后多选） */
+    bindMany: function (mchIds, lastMchId) {
       var data = this.load();
-      if (data.merchants.indexOf(mchId) === -1) data.merchants.push(mchId);
+      (mchIds || []).forEach(function (id) {
+        if (data.merchants.indexOf(id) === -1) data.merchants.push(id);
+      });
       data.openId = OPEN_ID;
-      data.lastMchId = mchId;
+      data.lastMchId = lastMchId || mchIds[0] || data.lastMchId;
       data.boundAt = formatTime(new Date());
       return this.save(data);
     },
@@ -633,6 +655,15 @@ window.MSS = (function () {
     return { ok: true, merchant: m };
   }
 
+  /** 手机号校验：11 位，并查出关联商户列表 */
+  function validatePhone(input) {
+    var v = String(input || '').replace(/\D/g, '');
+    if (!/^1\d{10}$/.test(v)) return { ok: false, msg: '请输入 11 位手机号' };
+    var list = findByPhone(v);
+    if (!list.length) return { ok: false, msg: '未查询到该手机号关联的商户，请确认预留手机号是否正确' };
+    return { ok: true, phone: v, merchants: list, masked: maskPhone(v) };
+  }
+
   function validateCode(code) {
     var v = String(code || '').trim();
     if (!/^\d{6}$/.test(v)) return { ok: false, msg: '请输入 6 位短信验证码' };
@@ -669,6 +700,58 @@ window.MSS = (function () {
     return '晚上好';
   }
 
+  /** 页面基址（用于生成可发给商户的处理链接） */
+  function pageBase() {
+    return window.location.href.replace(/[^/]*$/, '');
+  }
+
+  /**
+   * 将可自助解决方案转为商户可打开的处理链接（客服侧复制/短信下发）
+   * - 外链型：直接用配置 URL
+   * - 结算设置：小程序结算设置页（客服可转二维码分享）
+   * - 指引型：落到 action.html 展示步骤
+   * - 人工型：无链接
+   */
+  function buildActionLink(step, merchant) {
+    var sol = (step && step.solution) || {};
+    if (!step || !step.selfService) return '';
+    if (sol.url) return sol.url;
+    var mchId = (merchant && merchant.mchId) || '';
+    if (sol.type === 'settle_settings' || sol.page === 'settle_settings' || step.key === 'settlement') {
+      return pageBase() + 'mp-settle-settings.html?mchId=' + encodeURIComponent(mchId) +
+        '&from=cs';
+    }
+    var page = sol.page || step.key || 'guide';
+    return pageBase() + 'action.html?page=' + encodeURIComponent(page) +
+      '&key=' + encodeURIComponent(step.key || '') +
+      '&mchId=' + encodeURIComponent(mchId) +
+      '&title=' + encodeURIComponent(sol.title || step.name || '自助处理');
+  }
+
+  function isSettleSettingsStep(step) {
+    var sol = (step && step.solution) || {};
+    return !!(step && (step.key === 'settlement' || sol.type === 'settle_settings' || sol.page === 'settle_settings'));
+  }
+
+  /** 客服侧：小程序结算设置页二维码图片地址（演示用在线 QR 服务） */
+  function buildSettleQrImageUrl(link, size) {
+    size = size || 200;
+    return 'https://api.qrserver.com/v1/create-qr-code/?size=' + size + 'x' + size +
+      '&margin=8&data=' + encodeURIComponent(link || '');
+  }
+
+  /** 客服短信文案模板 */
+  function buildSmsText(merchant, step, link) {
+    var name = (merchant && merchant.name) || '商户';
+    var label = (step && step.solution && step.solution.label) || (step && step.name) || '处理';
+    if (isSettleSettingsStep(step)) {
+      return '【盛意旺】' + name + '您好，检测到未开启自动结算。请微信扫码打开小程序「结算设置」开启自动结算，或点击：' +
+        link + ' 。如已处理请忽略。';
+    }
+    return '【盛意旺】' + name + '您好，关于资金未到账（' + (step.summary || label) +
+      '），请点击链接完成处理：' + link + ' 。如已处理请忽略。';
+  }
+
   return {
     MERCHANTS: MERCHANTS,
     STEPS: STEPS,
@@ -677,15 +760,23 @@ window.MSS = (function () {
     VERIFY_CODE: VERIFY_CODE,
     merchantList: merchantList,
     findByMchId: findByMchId,
+    findByPhone: findByPhone,
     maskMchId: maskMchId,
+    maskPhone: maskPhone,
     getSettlement: getSettlement,
     bindStore: bindStore,
     reportStore: reportStore,
     validateMchId: validateMchId,
+    validatePhone: validatePhone,
     validateCode: validateCode,
     getScenario: getScenario,
     diagnose: diagnose,
     buildSnapshot: buildSnapshot,
+    buildActionLink: buildActionLink,
+    buildSmsText: buildSmsText,
+    isSettleSettingsStep: isSettleSettingsStep,
+    buildSettleQrImageUrl: buildSettleQrImageUrl,
+    pageBase: pageBase,
     track: track,
     getLog: function () { return log; },
     clearLog: clearLog,

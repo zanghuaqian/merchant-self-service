@@ -122,7 +122,9 @@ window.Assistant = (function () {
     solution: null,
     feedback: '',
     resolvedKeys: [],
-    selfServiceDone: false
+    processLog: [],
+    activeStepKey: '',
+    multiBundle: null
   };
 
   function emptyState(keepResolved) {
@@ -132,20 +134,105 @@ window.Assistant = (function () {
       solution: null,
       feedback: '',
       resolvedKeys: keepResolved ? (state.resolvedKeys || []).slice() : [],
-      selfServiceDone: false
+      processLog: keepResolved ? (state.processLog || []).slice() : [],
+      activeStepKey: '',
+      multiBundle: keepResolved ? state.multiBundle : null
     };
   }
 
-  function markSelfServiceDone(actionText) {
-    if (state.result && state.result.primary && state.result.primary.selfService) {
-      var key = state.result.primary.key;
-      if (state.resolvedKeys.indexOf(key) < 0) state.resolvedKeys.push(key);
-      state.selfServiceDone = true;
+  function resolveId(stepKey, mch) {
+    mch = mch || merchant();
+    return (mch.mchId || '') + ':' + stepKey;
+  }
+
+  function isStepResolved(stepKey, mch) {
+    var id = resolveId(stepKey, mch);
+    return state.resolvedKeys.indexOf(id) >= 0 || state.resolvedKeys.indexOf(stepKey) >= 0;
+  }
+
+  function resolvedKeysForMerchant(m) {
+    var prefix = (m.mchId || '') + ':';
+    var out = [];
+    (state.resolvedKeys || []).forEach(function (k) {
+      if (k.indexOf(prefix) === 0) out.push(k.slice(prefix.length));
+      else if (k.indexOf(':') < 0) out.push(k);
+    });
+    return out;
+  }
+
+  function resultBundles() {
+    if (state.multiBundle && state.multiBundle.length) return state.multiBundle;
+    if (state.result) return [{ merchant: merchant(), result: state.result }];
+    return [];
+  }
+
+  /** 当前结果中的全部异常项（含并行发现的 others） */
+  function allAbnormals(result) {
+    result = result || state.result;
+    if (!result) return [];
+    var list = [];
+    if (result.primary) list.push(result.primary);
+    (result.others || []).forEach(function (o) { list.push(o); });
+    return list;
+  }
+
+  function selfServiceAbnormals(result) {
+    return allAbnormals(result).filter(function (s) { return s.selfService; });
+  }
+
+  function unfinishedAbnormals(result, mch) {
+    return allAbnormals(result).filter(function (s) {
+      return !isStepResolved(s.key, mch);
+    });
+  }
+
+  function allSelfServiceDone(result, mch) {
+    var list = selfServiceAbnormals(result);
+    if (!list.length) return false;
+    return list.every(function (s) { return isStepResolved(s.key, mch); });
+  }
+
+  function allSelfServiceDoneAcross() {
+    var bundles = resultBundles();
+    var any = false;
+    for (var i = 0; i < bundles.length; i++) {
+      var list = selfServiceAbnormals(bundles[i].result);
+      if (!list.length) continue;
+      any = true;
+      if (!list.every(function (s) { return isStepResolved(s.key, bundles[i].merchant); })) return false;
     }
+    return any;
+  }
+
+  function markSelfServiceDone(actionText) {
+    var m = merchant();
+    var rawKey = state.activeStepKey || (state.result && state.result.primary && state.result.primary.key) || '';
+    if (rawKey.indexOf(':') >= 0) {
+      var parts = rawKey.split(':');
+      rawKey = parts.slice(1).join(':');
+    }
+    var id = rawKey ? resolveId(rawKey, m) : '';
+    if (id && state.resolvedKeys.indexOf(id) < 0) state.resolvedKeys.push(id);
+
+    var step = null;
+    resultBundles().forEach(function (b) {
+      if (step) return;
+      allAbnormals(b.result).forEach(function (s) {
+        if (s.key === rawKey) step = s;
+      });
+    });
+    state.processLog.push({
+      key: rawKey || '',
+      name: step ? step.name : '自助处理',
+      action: actionText || '已完成自助处理',
+      time: MSS.formatTime(new Date()),
+      mchId: m.mchId,
+      mchName: m.name
+    });
     if (actionText) state.userAction = actionText;
   }
 
-  /** 自助提交成功后：刷新结果页（露出重新诊断）并拉起反馈 */
+  /** 自助提交成功后：刷新结果页并拉起反馈 */
   function afterSelfServiceSuccess(actionText, toastMsg) {
     markSelfServiceDone(actionText);
     MSS.track('自助操作完成', actionText || '');
@@ -157,9 +244,17 @@ window.Assistant = (function () {
     }, 900);
   }
 
+  function diagnoseTargets() {
+    if (cfg.getDiagnoseMerchants) {
+      var list = cfg.getDiagnoseMerchants() || [];
+      if (list.length) return list;
+    }
+    return [merchant()];
+  }
+
   var FAQS = [
     { q: '资金什么时候到账？', a: 'T+1 结算的资金在结算日 10:00 前完成出款，银行入账通常在 2 小时内；节假日以银行处理时效为准。' },
-    { q: '如何开启自动提现？', a: '进入「我的 → 结算管理 → 结算设置」，打开「自动提现」开关并选择提现时间，保存后次日生效。' },
+    { q: '如何开启自动提现？', a: '进入「我的 → 账户余额 → 我的账户 → 结算设置」，打开「是否自动结算」开关并选择日切时间，保存后次日生效。关闭自动结算时可发起自助结算。' },
     { q: '结算卡可以换成对公账户吗？', a: '可以。个体工商户支持法人同名对私卡或对公账户；企业商户仅支持对公账户，变更需重新提交开户证明。' },
     { q: '退款为什么迟迟没有退回？', a: '退款由原支付渠道退回，微信/支付宝一般 1-3 个工作日，银行卡最长 7 个工作日；可在交易查询中查看退款状态。' }
   ];
@@ -381,23 +476,38 @@ window.Assistant = (function () {
 
   function startDiagnose(opts) {
     opts = opts || {};
-    /* 仅「重新诊断」保留已自助恢复的节点；首页新发起诊断清空 */
     var resolved = opts.redeploy ? (state.resolvedKeys || []).slice() : [];
-    var result = MSS.diagnose(cfg.getScenarioId(), merchant(), { resolvedKeys: resolved });
+    var keptLog = opts.redeploy ? (state.processLog || []).slice() : [];
+    var targets = diagnoseTargets();
     var isRedeploy = !!opts.redeploy;
+    var isMulti = targets.length > 1;
+
+    state.resolvedKeys = resolved;
+    var bundle = targets.map(function (m) {
+      return {
+        merchant: m,
+        result: MSS.diagnose(cfg.getScenarioId(), m, { resolvedKeys: resolvedKeysForMerchant(m) })
+      };
+    });
+    var result = bundle[0].result;
+
     state = emptyState(false);
     state.result = result;
     state.resolvedKeys = resolved;
+    state.processLog = keptLog;
+    state.multiBundle = isMulti ? bundle : null;
+
+    var subText = isMulti
+      ? '同时诊断 ' + targets.length + ' 个商户：' + targets.map(function (m) { return m.name; }).join('、')
+      : (isRedeploy
+        ? '已跳过 ' + resolved.length + ' 项已自助处理的异常，继续排查后续项'
+        : '已自动获取商户号 ' + MSS.maskMchId(merchant().mchId) + ' · 无需上传凭证');
 
     slot('asst-diag').innerHTML =
       '<div class="diagnosing">' +
         '<div class="radar"><span></span><span></span><span></span><div class="core">' + icon('shield') + '</div></div>' +
-        '<div class="d-title">' + (isRedeploy ? '正在重新诊断…' : '正在诊断，预计 5 秒…') + '</div>' +
-        '<div class="d-sub">' +
-          (isRedeploy
-            ? '已跳过 ' + resolved.length + ' 项已自助处理的异常，继续排查后续项'
-            : '已自动获取商户号 ' + MSS.maskMchId(merchant().mchId) + ' · 无需上传凭证') +
-        '</div>' +
+        '<div class="d-title">' + (isRedeploy ? '正在重新诊断…' : (isMulti ? '正在批量诊断…' : '正在诊断，预计 5 秒…')) + '</div>' +
+        '<div class="d-sub">' + subText + '</div>' +
         '<div class="progress"><i></i></div>' +
         '<div class="step-list">' +
           MSS.STEPS.map(function (s) {
@@ -407,12 +517,14 @@ window.Assistant = (function () {
               '<span class="st-state">排队中</span></div>';
           }).join('') +
         '</div>' +
-        '<div class="trace-foot">诊断流水号 ' + result.traceId + ' · 多系统并行查询</div>' +
+        '<div class="trace-foot">主流水号 ' + result.traceId +
+          (isMulti ? ' · 另含 ' + (targets.length - 1) + ' 份商户报告' : '') + '</div>' +
       '</div>';
 
     UI.go('asst-diag');
     MSS.track(isRedeploy ? '重新诊断' : '发起诊断',
-      '流水号 ' + result.traceId + ' · 场景 ' + result.scenarioId +
+      (isMulti ? '多商户×' + targets.length + ' · ' : '') +
+      '流水号 ' + result.traceId +
       (resolved.length ? ' · 已恢复 ' + resolved.join(',') : ''));
 
     var box = slot('asst-diag');
@@ -435,7 +547,6 @@ window.Assistant = (function () {
         bar.style.width = '72%';
         setStep(result.steps[3], 'running', '查询中');
         box.querySelector('.d-title').textContent = '诊断耗时较长…';
-        box.querySelector('.d-sub').textContent = '出款系统响应超时，正在重试';
         setTimeout(onTimeout, 1500);
         return;
       }
@@ -474,11 +585,10 @@ window.Assistant = (function () {
 
   /* ------------------------------ 诊断结果（5.1） ------------------------------ */
 
-  function detailRows(result) {
+  function detailRows(result, mch) {
     return result.steps.map(function (s) {
-      var locallyDone = state.selfServiceDone && state.result && state.result.primary &&
-        state.result.primary.key === s.key && s.status === 'abnormal';
-      var status = locallyDone ? 'resolved' : s.status;
+      var done = isStepResolved(s.key, mch) && (s.status === 'abnormal' || s.status === 'resolved');
+      var status = done ? 'resolved' : s.status;
       var cls = status === 'abnormal' ? 'bad'
         : status === 'skipped' ? 'skip'
         : status === 'resolved' ? 'resolved'
@@ -487,7 +597,7 @@ window.Assistant = (function () {
         : status === 'skipped' ? '未执行'
         : status === 'resolved' ? '已自助'
         : '正常';
-      var brief = locallyDone ? '商户已完成自助处理，可重新诊断继续排查' : s.brief;
+      var brief = done ? '商户已完成自助处理' : s.brief;
       return '<div class="step ' + cls + '">' +
         '<span class="st-icon">' + (cls === 'bad' ? '!' : cls === 'skip' ? '–' : '✓') + '</span>' +
         '<span><span class="st-name">' + s.name + '</span><span class="st-source">' + brief + '</span></span>' +
@@ -495,37 +605,100 @@ window.Assistant = (function () {
     }).join('');
   }
 
-  function detailCollapse(result) {
-    var hasSkip = result.steps.some(function (s) { return s.status === 'skipped'; });
-    var primarySelf = !!(result.primary && result.primary.selfService);
-    var canRedeploy = state.selfServiceDone && primarySelf;
-    var showRedeploy = primarySelf && (hasSkip || state.selfServiceDone);
+  function abnormalCards(result, mch) {
+    var items = allAbnormals(result);
+    if (!items.length) {
+      return '<div class="abn-empty">该商户本次未发现异常项</div>';
+    }
+    return '<div class="abn-list">' +
+      '<div class="abn-title">异常诊断项（' + items.length + '）' +
+        tip('所有异常项置顶展示。可点击展开查看详情并按指引处理；存在多个可自助异常时，需分别完成后再重新诊断。') +
+      '</div>' +
+      items.map(function (s, i) {
+        var done = isStepResolved(s.key, mch);
+        var sol = s.solution || {};
+        return '<details class="abn-card' + (done ? ' is-done' : '') + '"' + (i === 0 ? ' open' : '') + '>' +
+          '<summary>' +
+            '<span class="abn-badge">' + (done ? '已自助' : (s.selfService ? '可自助' : '需人工')) + '</span>' +
+            '<span class="abn-name">' + s.name + '</span>' +
+            '<span class="abn-sum">' + s.summary + '</span>' +
+            '<span class="caret">▾</span>' +
+          '</summary>' +
+          '<div class="abn-body">' +
+            '<div class="abn-detail">' + s.detail + '</div>' +
+            '<div class="kv"><span class="k">处理方式</span><span class="v">' +
+              (s.selfService ? '商户自助处理' : '转人工处理') + '</span></div>' +
+            (done
+              ? '<div class="abn-done-tip">该项已完成自助处理</div>'
+              : (s.selfService
+                ? '<button class="btn btn-primary" data-act="solve-one" data-key="' + s.key +
+                    '" data-mch="' + mch.mchId + '" type="button">' +
+                    (sol.label || '去处理') + '</button>'
+                : '<button class="btn btn-primary" data-act="agent-main" type="button">' + icon('headset') + ' 联系客服</button>')) +
+          '</div></details>';
+      }).join('') +
+    '</div>';
+  }
 
-    return '<details class="collapse"' + (canRedeploy ? ' open' : '') + '>' +
+  function rediagBox() {
+    var unfinished = [];
+    resultBundles().forEach(function (b) {
+      unfinishedAbnormals(b.result, b.merchant).forEach(function (s) {
+        if (s.selfService) unfinished.push(s);
+      });
+    });
+    var hasSelf = unfinished.length > 0 || resultBundles().some(function (b) {
+      return selfServiceAbnormals(b.result).length > 0;
+    });
+    var hasSkip = resultBundles().some(function (b) {
+      return b.result.steps.some(function (s) { return s.status === 'skipped'; });
+    });
+    if (!hasSelf && !hasSkip) return '';
+    var canRedeploy = allSelfServiceDoneAcross();
+    return '<div class="rediag-box' + (canRedeploy ? ' is-ready' : '') + '">' +
+      '<div class="rediag-text">' +
+        (canRedeploy
+          ? '全部可自助异常项已处理完成。可重新诊断，继续排查此前未执行的后续项。'
+          : '请分别完成全部可自助异常项（剩余 ' + unfinished.length + ' 项）后，再重新诊断。') +
+      '</div>' +
+      '<button class="btn ' + (canRedeploy ? 'btn-primary' : 'btn-ghost') +
+        ' rediag-btn" data-act="rediag" type="button"' +
+        (canRedeploy ? '' : ' disabled') + '>' +
+        (canRedeploy ? '重新诊断' : '完成全部可自助项后再诊断') +
+      '</button></div>';
+  }
+
+  function detailCollapse(result, mch) {
+    return '<details class="collapse">' +
       '<summary>完整排查明细（5 项）' +
-        tip('诊断引擎按风控→资质→结算配置→出款批次→分账顺序排查，命中阻断异常后终止后续查询。前置异常自助处理完成后，可在明细中手动重新诊断，继续排查被终止的后续项。') +
+        tip('诊断引擎按风控→资质→结算配置→出款批次→分账顺序排查。异常项已置顶；完成后可重新诊断未执行项。') +
         '<span class="caret">▾</span></summary>' +
-      '<div class="cp-body">' + detailRows(result) +
-        (showRedeploy
-          ? '<div class="rediag-box' + (canRedeploy ? ' is-ready' : '') + '">' +
-              '<div class="rediag-text">' +
-                (canRedeploy
-                  ? '前置异常已自助处理完成。可重新诊断，继续排查此前因优先级终止的后续项。'
-                  : '命中阻断异常后后续项未执行。完成上方自助处理后，可在此手动重新诊断。') +
-              '</div>' +
-              '<button class="btn ' + (canRedeploy ? 'btn-primary' : 'btn-ghost') +
-                ' rediag-btn" data-act="rediag" type="button"' +
-                (canRedeploy ? '' : ' disabled') + '>' +
-                (canRedeploy ? '重新诊断' : '完成自助处理后可重新诊断') +
-              '</button>' +
-            '</div>'
-          : '') +
-      '</div></details>';
+      '<div class="cp-body">' + detailRows(result, mch) + '</div></details>';
+  }
+
+  function multiBundleBanner() {
+    if (!state.multiBundle || state.multiBundle.length < 2) return '';
+    return '<div class="multi-banner">本次同时诊断 <b>' + state.multiBundle.length +
+      '</b> 个商户。每位商户独立一张诊断卡片（含基本信息、异常项、完整排查、结算规则）；默认展开第一户，其余收起仅显示诊断结果，点击可展开。转人工时合并为一份报告。</div>';
+  }
+
+  function processLogBlock() {
+    if (!state.processLog.length) return '';
+    return '<div class="plog">' +
+      '<div class="plog-title">自助处理过程记录（' + state.processLog.length + '）</div>' +
+      state.processLog.map(function (p) {
+        return '<div class="plog-item">' +
+          '<div class="plog-main">' + p.name + ' · ' + p.action + '</div>' +
+          '<div class="plog-sub">' + (p.mchName || p.mchId || '') + ' · ' + p.time + '</div>' +
+        '</div>';
+      }).join('') +
+    '</div>';
   }
 
   /** 结果页折叠区：当前结算信息与规则，便于商户核对到账口径 */
-  function settleCollapse() {
-    var s = MSS.getSettlement(merchant(), cfg.getScenarioId());
+  function settleCollapse(mch) {
+    mch = mch || merchant();
+    var s = MSS.getSettlement(mch, cfg.getScenarioId());
     if (!s) return '';
     var rows = [
       ['结算卡', s.cardType + ' · ' + s.accountName],
@@ -542,90 +715,163 @@ window.Assistant = (function () {
         return '<div class="kv" style="padding:7px 0"><span class="k" style="flex:0 0 96px">' + r[0] +
           '</span><span class="v">' + r[1] + '</span></div>';
       }).join('') +
-      '<button class="btn btn-ghost" data-act="settle-detail" style="margin-top:8px">查看结算信息详情</button>' +
+      '<button class="btn btn-ghost" data-act="settle-detail" data-mch="' + mch.mchId +
+        '" style="margin-top:8px">查看结算信息详情</button>' +
       '</div></details>';
   }
 
+  function merchantResultBrief(result) {
+    var abns = allAbnormals(result);
+    if (!abns.length) return '5 项排查均正常，暂未发现异常';
+    if (abns.length === 1) return abns[0].summary;
+    return '发现 ' + abns.length + ' 项异常：' + abns.map(function (s) { return s.name; }).join('、');
+  }
+
+  /** 单个商户诊断卡片：基本信息 + 异常项 + 完整排查 + 结算信息 */
+  function merchantDiagCard(bundle, idx, isMulti) {
+    var m = bundle.merchant;
+    var r = bundle.result;
+    var abns = allAbnormals(r);
+    var brief = merchantResultBrief(r);
+    var basic =
+      '<div class="res-card">' +
+        '<div class="rc-label"><span class="bar" style="background:var(--brand)"></span>基本信息</div>' +
+        '<div class="kv"><span class="k">商户名称</span><span class="v">' + m.name + '</span></div>' +
+        '<div class="kv"><span class="k">商户号</span><span class="v">' + m.mchId + '</span></div>' +
+        '<div class="kv"><span class="k">产品线</span><span class="v">' + m.line + '</span></div>' +
+        '<div class="kv"><span class="k">诊断流水号</span><span class="v">' + r.traceId + '</span></div>' +
+        '<div class="kv"><span class="k">诊断时间</span><span class="v">' + r.time + '</span></div>' +
+      '</div>';
+    var body = basic + abnormalCards(r, m) + detailCollapse(r, m) + settleCollapse(m);
+
+    if (!isMulti) {
+      return '<div class="mch-sec" data-mch-sec="' + m.mchId + '">' + body + '</div>';
+    }
+
+    var open = idx === 0;
+    return '<details class="mch-diag-card' + (abns.length ? ' has-abn' : ' is-ok') + '"' +
+      (open ? ' open' : '') + ' data-mch-sec="' + m.mchId + '">' +
+      '<summary class="mch-diag-summary">' +
+        '<div class="mds-top">' +
+          '<span class="mds-name">' + m.name + '</span>' +
+          '<span class="mds-badge">' + (abns.length ? (abns.length + ' 项异常') : '正常') + '</span>' +
+          '<span class="caret">▾</span>' +
+        '</div>' +
+        '<div class="mds-meta">商户号 ' + m.mchId + ' · ' + m.line + '</div>' +
+        '<div class="mds-result">' + brief + '</div>' +
+      '</summary>' +
+      '<div class="mch-diag-body">' + body + '</div>' +
+    '</details>';
+  }
+
   function showResult(result) {
-    var p = result.primary;
-    var html;
+    var bundles = resultBundles();
+    if (!bundles.length && result) bundles = [{ merchant: merchant(), result: result }];
+    var isMulti = bundles.length > 1;
 
-    if (p) {
-      var sol = p.solution || {};
-      var mainBtn = sol.type === 'agent'
-        ? '<button class="btn btn-primary" data-act="agent-main">' + icon('headset') + ' 联系客服</button>'
-        : '<button class="btn btn-primary" data-act="solve">' + sol.label + '</button>';
+    var totalAbn = 0;
+    var unfinishedSelf = 0;
+    bundles.forEach(function (b) {
+      allAbnormals(b.result).forEach(function (s) {
+        totalAbn += 1;
+        if (s.selfService && !isStepResolved(s.key, b.merchant)) unfinishedSelf += 1;
+      });
+    });
 
-      html =
-        '<div class="result">' +
-          '<div class="result-head">' +
-            '<div class="result-icon bad">!</div>' +
-            '<h2>' + p.summary + '</h2>' +
-            '<p>' + (p.selfService ? '该问题可自助处理，按下方指引操作后资金将恢复出款。' : '该问题需人工介入核实，建议直接联系客服。') + '</p>' +
-          '</div>' +
-          '<div class="res-card">' +
-            '<div class="rc-label"><span class="bar"></span>问题原因' +
-              tip('原因说明取自诊断引擎命中的系统字段（如资质到期日、批次错误码），不同异常类型文案由后台解决方案配置表维护。') +
-            '</div>' +
-            '<div class="rc-text">' + p.detail + '</div>' +
-          '</div>' +
-          '<div class="res-card">' +
-            '<div class="rc-label"><span class="bar" style="background:var(--brand)"></span>诊断信息</div>' +
-            '<div class="kv"><span class="k">异常节点</span><span class="v">' + p.name + '</span></div>' +
-            '<div class="kv"><span class="k">处理方式</span><span class="v">' + (p.selfService ? '商户自助处理' : '转人工处理') + '</span></div>' +
-            '<div class="kv"><span class="k">诊断流水号</span><span class="v">' + result.traceId + '</span></div>' +
-          '</div>' +
-          (result.others.length
-            ? '<div class="other-tip">另发现 ' + result.others.length + ' 项异常，已按阻断优先级展示最高优先级问题，可在下方明细中查看其余项。</div>'
-            : '') +
-          '<div class="btn-row">' + mainBtn +
-            (sol.type === 'agent' ? '' : '<button class="btn btn-ghost" data-act="agent">联系客服</button>') +
-          '</div>' +
-          detailCollapse(result) +
-          settleCollapse() +
-          '<div class="trace-foot">诊断时间 ' + result.time + '<br>结论基于实时系统数据，如与实际不符请联系客服</div>' +
+    var headHtml;
+    if (totalAbn > 0) {
+      headHtml =
+        '<div class="result-head">' +
+          '<div class="result-icon bad">!</div>' +
+          '<h2>' + (isMulti
+            ? ('共 ' + bundles.length + ' 个商户 · 发现 ' + totalAbn + ' 项异常')
+            : ('发现 ' + totalAbn + ' 项异常')) + '</h2>' +
+          '<p>' + (isMulti
+            ? '每个商户一份诊断卡片。默认展开第一个商户，其余仅显示诊断结果，点击可展开详情。'
+            : '异常项已置顶，请逐项展开查看详情并处理。') +
+            (unfinishedSelf > 0
+              ? '尚有 <b>' + unfinishedSelf + '</b> 项可自助异常待处理，全部完成后再重新诊断。'
+              : '可自助项已全部处理，可重新诊断或联系客服。') +
+          '</p>' +
         '</div>';
     } else {
-      html =
-        '<div class="result">' +
-          '<div class="result-head">' +
-            '<div class="result-icon ok">✓</div>' +
-            '<h2>暂未发现异常</h2>' +
-            '<p>5 项排查均正常' +
-              (state.resolvedKeys.length ? '（含 ' + state.resolvedKeys.length + ' 项已自助恢复）' : '') +
-              '，资金可能仍在银行处理中。<br>建议 2 小时后再次查看账户余额与结算记录。</p>' +
-          '</div>' +
-          '<div class="res-card">' +
-            '<div class="rc-label"><span class="bar" style="background:var(--success)"></span>排查结论</div>' +
-            '<div class="kv"><span class="k">最近批次</span><span class="v">PO20260731066 已出款成功，金额 8,420.00 元</span></div>' +
-            '<div class="kv"><span class="k">预计到账</span><span class="v">今日 18:00 前（以银行入账时间为准）</span></div>' +
-            '<div class="kv"><span class="k">诊断流水号</span><span class="v">' + result.traceId + '</span></div>' +
-          '</div>' +
-          '<div class="btn-row"><button class="btn btn-primary" data-act="later">稍后查看</button>' +
-            '<button class="btn btn-ghost" data-act="agent">联系客服</button></div>' +
-          detailCollapse(result) +
-          settleCollapse() +
-          '<div class="trace-foot">诊断时间 ' + result.time + '</div>' +
+      headHtml =
+        '<div class="result-head">' +
+          '<div class="result-icon ok">✓</div>' +
+          '<h2>暂未发现异常</h2>' +
+          '<p>5 项排查均正常' +
+            (state.resolvedKeys.length ? '（含已自助恢复项）' : '') +
+            '，资金可能仍在银行处理中。<br>建议 2 小时后再次查看账户余额与结算记录。</p>' +
         '</div>';
     }
+
+    var sections = bundles.map(function (b, idx) {
+      return merchantDiagCard(b, idx, isMulti);
+    }).join('');
+
+    var footerBtns = totalAbn === 0
+      ? '<div class="btn-row"><button class="btn btn-primary" data-act="later">稍后查看</button>' +
+          '<button class="btn btn-ghost" data-act="agent">联系客服</button></div>'
+      : '<div class="btn-row">' +
+          '<button class="btn btn-ghost" data-act="agent">' + icon('headset') + ' 联系客服</button></div>';
+
+    var html =
+      '<div class="result">' +
+        multiBundleBanner() +
+        headHtml +
+        (isMulti ? '<div class="mch-diag-list">' + sections + '</div>' : sections) +
+        processLogBlock() +
+        rediagBox() +
+        footerBtns +
+        '<div class="trace-foot">诊断时间 ' + (result.time || '') +
+          '<br>结论基于实时系统数据，如与实际不符请联系客服</div>' +
+      '</div>';
 
     var el = slot('asst-result');
     el.innerHTML = html;
     UI.go('asst-result');
-    MSS.track('诊断完成', p ? '命中异常：' + p.name : '未发现异常');
+    MSS.track('诊断完成', totalAbn ? ('异常 ' + totalAbn + ' 项' + (isMulti ? ' · 多商户' : '')) : '未发现异常');
 
-    var solveBtn = el.querySelector('[data-act="solve"]');
-    if (solveBtn) solveBtn.onclick = function () { openSolution(result.primary); };
+    el.querySelectorAll('[data-act="settle-detail"]').forEach(function (settleLink) {
+      settleLink.onclick = function () {
+        var mchId = settleLink.getAttribute('data-mch');
+        if (mchId && MSS.bindStore && MSS.bindStore.setLast) {
+          try { MSS.bindStore.setLast(mchId); } catch (e) { /* ignore */ }
+        }
+        MSS.track('结算信息查看', '入口：诊断报告 · ' + (mchId || ''));
+        renderSettlement();
+      };
+    });
 
-    var settleLink = el.querySelector('[data-act="settle-detail"]');
-    if (settleLink) settleLink.onclick = function () {
-      MSS.track('结算信息查看', '入口：诊断报告');
-      renderSettlement();
-    };
+    el.querySelectorAll('[data-act="solve-one"]').forEach(function (b) {
+      b.onclick = function () {
+        var key = b.getAttribute('data-key');
+        var mchId = b.getAttribute('data-mch');
+        var target = null;
+        var step = null;
+        resultBundles().forEach(function (bundle) {
+          if (String(bundle.merchant.mchId) !== String(mchId)) return;
+          target = bundle.merchant;
+          allAbnormals(bundle.result).forEach(function (s) {
+            if (s.key === key) step = s;
+          });
+        });
+        if (!step) return;
+        if (target && MSS.bindStore && MSS.bindStore.setLast) {
+          try { MSS.bindStore.setLast(target.mchId); } catch (e) { /* ignore */ }
+        }
+        state.activeStepKey = resolveId(step.key, target || merchant());
+        openSolution(step);
+      };
+    });
 
     el.querySelectorAll('[data-act="agent"],[data-act="agent-main"]').forEach(function (b) {
       b.onclick = function () {
-        toAgent({ mode: 'chat', reason: p ? '诊断结论：' + p.summary : '未发现异常仍未到账' });
+        var first = allAbnormals(result)[0];
+        toAgent({
+          mode: 'chat',
+          reason: first ? ('诊断结论：' + first.summary) : '未发现异常仍未到账'
+        });
       };
     });
 
@@ -643,6 +889,16 @@ window.Assistant = (function () {
         startDiagnose({ redeploy: true });
       };
     }
+
+    if (isMulti) {
+      el.querySelectorAll('.mch-diag-card').forEach(function (card) {
+        card.addEventListener('toggle', function () {
+          if (card.open) {
+            MSS.track('展开商户诊断卡片', card.getAttribute('data-mch-sec') || '');
+          }
+        });
+      });
+    }
   }
 
   /* ------------------------------ 解决方案页（4.3） ------------------------------ */
@@ -650,7 +906,21 @@ window.Assistant = (function () {
   function openSolution(step) {
     var sol = step.solution;
     state.solution = sol;
+    if (!state.activeStepKey || state.activeStepKey.indexOf(step.key) < 0) {
+      state.activeStepKey = resolveId(step.key, merchant());
+    }
     MSS.track('点击自助操作', sol.label + ' · ' + step.name);
+
+    if (sol.type === 'settle_settings' || sol.page === 'settle_settings') {
+      openSettleSettings(step, sol);
+      return;
+    }
+
+    if (sol.type === 'card_change' || sol.page === 'card') {
+      renderCardChangePage(step, sol);
+      UI.go('asst-page');
+      return;
+    }
 
     if (sol.page === 'risk_order') renderRiskOrderPage(step, sol);
     else if (sol.type === 'guide') renderGuidePage(sol);
@@ -658,6 +928,60 @@ window.Assistant = (function () {
     else renderFormPage(step, sol);
 
     UI.go('asst-page');
+  }
+
+  /** App 直达结算设置页；公众号打开小程序结算设置页 */
+  function openSettleSettings(step, sol) {
+    if (cfg.platform === 'app' && window.SettleSettings) {
+      SettleSettings.setContext({
+        fromDiagnosis: true,
+        onComplete: function (msg) {
+          afterSelfServiceSuccess(msg || '已完成结算设置', '设置已生效，可返回查看诊断结果');
+        }
+      });
+      SettleSettings.renderSettings();
+      UI.go('settle-settings', { reset: true });
+      return;
+    }
+    renderMpSettleSettings(sol);
+    UI.go('asst-page');
+  }
+
+  function renderMpSettleSettings(sol) {
+    var el = cfg.root.querySelector('[data-view="asst-page"]');
+    var mountId = 'mpSettleMount';
+    el.innerHTML = nativePageChrome('结算设置', { backAct: 'page-back' }) +
+      '<div class="mp-settle-banner">小程序 · 结算设置' +
+        tip('公众号诊断命中「未开自动提现」时，引导打开微信小程序结算设置页，商户可开启自动结算或发起自助结算。') +
+      '</div>' +
+      '<div class="settle-body" id="' + mountId + '"></div>';
+
+    if (window.SettleSettings) {
+      if (!SettleSettings._initedForWx) {
+        SettleSettings.init({ getMerchant: merchant });
+        SettleSettings._initedForWx = true;
+      }
+      SettleSettings.setContext({
+        fromDiagnosis: true,
+        embed: true,
+        onComplete: function (msg) {
+          afterSelfServiceSuccess(msg || '已在小程序结算设置中完成处理', '设置已保存');
+        }
+      });
+      SettleSettings.renderSettings(mountId);
+    } else {
+      el.querySelector('#' + mountId).innerHTML =
+        '<div class="ss-card" style="padding:16px;line-height:1.7">请前往盛意旺小程序「结算设置」开启自动结算。</div>';
+    }
+
+    var back = el.querySelector('[data-act="page-back"]');
+    if (back) {
+      back.onclick = function () {
+        if (window.SettleSettings) SettleSettings.setContext({});
+        UI.go('asst-result', { animate: false });
+        openFeedback();
+      };
+    }
   }
 
   /** App = H5 WebView 顶栏；公众号 = 小程序顶栏 */
@@ -925,6 +1249,161 @@ window.Assistant = (function () {
     };
   }
 
+  /**
+   * 结算卡信息变更申请
+   * App（图1）：原生导航顶栏；公众号（图2）：小程序顶栏 + 胶囊
+   */
+  function renderCardChangePage(step, sol) {
+    var m = merchant();
+    var st = MSS.getSettlement(m, cfg.getScenarioId()) || m.settlement || {};
+    var acctName = st.accountNameFull || st.accountName || m.name;
+    var defaultType = st.cardType === '对私' ? 'legal' : 'corp';
+    var title = sol.title || '结算卡信息变更申请';
+
+    var types = [
+      { id: 'corp', name: '对公账户' },
+      { id: 'legal', name: '法人个人储蓄账户' },
+      { id: 'other', name: '其他个人储蓄账户' }
+    ];
+
+    var typeHtml = types.map(function (t) {
+      return '<button type="button" class="scc-type' + (t.id === defaultType ? ' is-on' : '') +
+        '" data-type="' + t.id + '">' + t.name + '<i class="scc-check"></i></button>';
+    }).join('');
+
+    var body =
+      '<div class="scc-page">' +
+        (step && step.detail
+          ? '<div class="scc-alert">当前结算卡异常：' + step.summary + '。请更新结算卡信息，提交后系统将于次日自动重新出款。</div>'
+          : '') +
+        '<div class="scc-section">' +
+          '<div class="scc-sec-title">请填写结算类型</div>' +
+          '<div class="scc-label">结算账户类型</div>' +
+          '<div class="scc-types">' + typeHtml + '</div>' +
+        '</div>' +
+        '<div class="scc-form">' +
+          '<div class="scc-row">' +
+            '<span class="scc-k">账户名称</span>' +
+            '<span class="scc-v is-ro" id="sccAcctName">' + acctName + '</span></div>' +
+          '<div class="scc-row">' +
+            '<span class="scc-k">银行账号</span>' +
+            '<input class="scc-input" id="sccAcctNo" inputmode="numeric" placeholder="请输入对公银行账号"></div>' +
+          '<div class="scc-row">' +
+            '<span class="scc-k">确认银行账号</span>' +
+            '<input class="scc-input" id="sccAcctNo2" inputmode="numeric" placeholder="请再次输入对公银行账号"></div>' +
+          '<div class="scc-row is-link" data-act="pick-bank">' +
+            '<span class="scc-k">开户银行</span>' +
+            '<span class="scc-v placeholder" id="sccBank">请输入开户银行</span>' +
+            '<span class="scc-arrow">›</span></div>' +
+        '</div>' +
+        '<div class="scc-submit-wrap">' +
+          '<button type="button" class="btn btn-primary" data-act="submit">提交</button></div>' +
+        '<div class="scc-foot">' +
+          (cfg.platform === 'app' ? '盛意旺 App · 结算卡变更' : '盛意旺小程序 · 结算卡变更') +
+        '</div>' +
+      '</div>';
+
+    var el = cfg.root.querySelector('[data-view="asst-page"]');
+    if (cfg.platform === 'app') {
+      el.innerHTML =
+        UI.statusBarHTML('light') +
+        '<div class="scc-nav">' +
+          '<button data-act="page-back" type="button" aria-label="返回">‹</button>' +
+          '<span class="scc-nav-title">' + title +
+            tip('诊断命中结算卡异常时，App 内打开结算卡信息变更申请页；公众号打开小程序同款表单。') +
+          '</span>' +
+        '</div>' +
+        '<div class="view-body scc-body">' + body + '</div>';
+    } else {
+      el.innerHTML = nativePageChrome(title, { backAct: 'page-back' }) +
+        '<div class="view-body scc-body">' + body + '</div>';
+    }
+
+    var placeholders = {
+      corp: ['请输入对公银行账号', '请再次输入对公银行账号'],
+      legal: ['请输入法人个人银行账号', '请再次输入法人个人银行账号'],
+      other: ['请输入个人银行账号', '请再次输入个人银行账号']
+    };
+
+    function setType(id) {
+      el.querySelectorAll('.scc-type').forEach(function (b) {
+        b.classList.toggle('is-on', b.getAttribute('data-type') === id);
+      });
+      var ph = placeholders[id] || placeholders.corp;
+      var a1 = el.querySelector('#sccAcctNo');
+      var a2 = el.querySelector('#sccAcctNo2');
+      if (a1) a1.placeholder = ph[0];
+      if (a2) a2.placeholder = ph[1];
+      if (id === 'corp') {
+        el.querySelector('#sccAcctName').textContent = acctName;
+      } else if (id === 'legal') {
+        el.querySelector('#sccAcctName').textContent = '张*明（法人）';
+      } else {
+        el.querySelector('#sccAcctName').textContent = '请与开户名保持一致';
+      }
+    }
+
+    el.querySelectorAll('.scc-type').forEach(function (b) {
+      b.onclick = function () {
+        setType(b.getAttribute('data-type'));
+      };
+    });
+
+    var bankVal = '';
+    var bankBtn = el.querySelector('[data-act="pick-bank"]');
+    if (bankBtn) {
+      bankBtn.onclick = function () {
+        var banks = ['招商银行', '中国工商银行', '中国建设银行', '中国农业银行', '中国银行', '交通银行'];
+        var mk = UI.mask(
+          '<div class="sheet"><div class="sheet-head"><div><h3>选择开户银行</h3><p>演示环境提供常用银行</p></div>' +
+            '<button class="sheet-close">✕</button></div>' +
+            '<div class="scc-bank-list">' +
+            banks.map(function (name) {
+              return '<button type="button" class="scc-bank-item" data-bank="' + name + '">' + name + '</button>';
+            }).join('') +
+            '</div></div>');
+        mk.querySelector('.sheet-close').onclick = function () { UI.close(mk); };
+        mk.querySelectorAll('[data-bank]').forEach(function (item) {
+          item.onclick = function () {
+            bankVal = item.getAttribute('data-bank');
+            var v = el.querySelector('#sccBank');
+            v.textContent = bankVal;
+            v.classList.remove('placeholder');
+            UI.close(mk);
+          };
+        });
+      };
+    }
+
+    el.querySelector('[data-act="page-back"]').onclick = function () {
+      state.userAction = '已打开「' + title + '」后返回';
+      MSS.track('自助页面返回', title);
+      UI.go('asst-result', { animate: false });
+      openFeedback();
+    };
+
+    el.querySelector('[data-act="submit"]').onclick = function () {
+      var no1 = (el.querySelector('#sccAcctNo').value || '').replace(/\s/g, '');
+      var no2 = (el.querySelector('#sccAcctNo2').value || '').replace(/\s/g, '');
+      if (!/^\d{8,32}$/.test(no1)) {
+        UI.toast('请输入有效银行账号');
+        return;
+      }
+      if (no1 !== no2) {
+        UI.toast('两次输入的银行账号不一致');
+        return;
+      }
+      if (!bankVal) {
+        UI.toast('请选择开户银行');
+        return;
+      }
+      afterSelfServiceSuccess(
+        '已提交结算卡信息变更申请（' + bankVal + '）',
+        '提交成功，审核通过后次日自动重新出款'
+      );
+    };
+  }
+
   function renderFormPage(step, sol) {
     var body;
     if (sol.page === 'qualification') {
@@ -943,22 +1422,9 @@ window.Assistant = (function () {
         '</div>' +
         '<div class="page-actions"><button class="btn btn-primary" data-act="submit">提交审核</button></div>';
     } else {
-      var st = MSS.getSettlement(merchant(), cfg.getScenarioId());
       body =
-        '<div class="notice">最近一笔结算批次因收款卡信息异常出款失败，更新结算卡后系统将于次日自动重新出款。</div>' +
-        '<div class="form-card"><h3>当前结算卡</h3>' +
-          '<div class="form-row"><span class="f-label">账户类型</span><span class="f-value" style="text-align:right">' + st.cardType + '账户</span></div>' +
-          '<div class="form-row"><span class="f-label">开户名</span><span class="f-value">' + st.accountName + '</span><span class="f-tag bad">名称不一致</span></div>' +
-          '<div class="form-row"><span class="f-label">卡号</span><span class="f-value" style="text-align:right">' + st.cardNo + '</span></div>' +
-          '<div class="form-row"><span class="f-label">归属银行</span><span class="f-value" style="text-align:right">' + st.bank + '</span></div>' +
-        '</div>' +
-        '<div class="form-card"><h3>变更为</h3>' +
-          '<div class="form-row"><span class="f-label">账户类型</span><select><option>对公账户</option><option>法人对私卡</option></select></div>' +
-          '<div class="form-row"><span class="f-label">开户名</span><input value="' + st.accountNameFull + '"></div>' +
-          '<div class="form-row"><span class="f-label">卡号</span><input placeholder="请输入结算卡号" value="6212 **** **** 0426"></div>' +
-          '<div class="form-row"><span class="f-label">开户行</span><input value="招商银行北京分行营业部"></div>' +
-        '</div>' +
-        '<div class="page-actions"><button class="btn btn-primary" data-act="submit">提交变更</button></div>';
+        '<div class="notice">请按页面提示完成自助处理。</div>' +
+        '<div class="page-actions"><button class="btn btn-primary" data-act="submit">提交</button></div>';
     }
 
     var el = cfg.root.querySelector('[data-view="asst-page"]');
@@ -1136,23 +1602,80 @@ window.Assistant = (function () {
    * 生成诊断报告独立链接：报告数据落库（演示用同源存储模拟服务端），
    * 链接带一次性令牌与有效期，仅供客服在工作台打开。
    */
+  function buildMergedDiagnosisPayload() {
+    var bundles = resultBundles();
+    var unfinished = [];
+    var reports = bundles.map(function (b) {
+      var snap = MSS.buildSnapshot(b.merchant, b.result, state.userAction);
+      unfinishedAbnormals(b.result, b.merchant).forEach(function (s) {
+        unfinished.push({
+          mchId: b.merchant.mchId,
+          mchName: b.merchant.name,
+          key: s.key,
+          name: s.name,
+          summary: s.summary,
+          detail: s.detail,
+          selfService: !!s.selfService
+        });
+      });
+      return {
+        merchant: { mchId: b.merchant.mchId, name: b.merchant.name, line: b.merchant.line },
+        settlement: MSS.getSettlement(b.merchant, cfg.getScenarioId()),
+        diagnosis: {
+          traceId: snap.result.traceId,
+          time: snap.result.time,
+          primary: snap.result.primary
+            ? { summary: snap.result.primary.summary, detail: snap.result.primary.detail, name: snap.result.primary.name }
+            : null,
+          abnormals: allAbnormals(b.result).map(function (s) {
+            return {
+              key: s.key,
+              name: s.name,
+              summary: s.summary,
+              detail: s.detail,
+              selfService: !!s.selfService,
+              resolved: isStepResolved(s.key, b.merchant)
+            };
+          }),
+          nodes: snap.nodes,
+          userAction: snap.userAction
+        }
+      };
+    });
+    return {
+      reports: reports,
+      processLog: (state.processLog || []).slice(),
+      unfinished: unfinished,
+      feedback: state.feedback || ''
+    };
+  }
+
   function buildReport(ctx, snap) {
     var m = merchant();
+    var merged = state.result ? buildMergedDiagnosisPayload() : null;
+    var primaryDiag = snap ? {
+      traceId: snap.result.traceId,
+      time: snap.result.time,
+      primary: snap.result.primary
+        ? { summary: snap.result.primary.summary, detail: snap.result.primary.detail }
+        : null,
+      nodes: snap.nodes,
+      userAction: snap.userAction,
+      feedback: state.feedback || ''
+    } : null;
+
     return MSS.reportStore.save({
       source: cfg.platform,
       reason: ctx.reason,
       merchant: { mchId: m.mchId, name: m.name, line: m.line },
+      merchants: merged
+        ? merged.reports.map(function (r) { return r.merchant; })
+        : [{ mchId: m.mchId, name: m.name, line: m.line }],
       settlement: MSS.getSettlement(m, cfg.getScenarioId()),
-      diagnosis: snap ? {
-        traceId: snap.result.traceId,
-        time: snap.result.time,
-        primary: snap.result.primary
-          ? { summary: snap.result.primary.summary, detail: snap.result.primary.detail }
-          : null,
-        nodes: snap.nodes,
-        userAction: snap.userAction,
-        feedback: state.feedback || ''
-      } : null
+      diagnosis: primaryDiag,
+      multi: merged,
+      processLog: merged ? merged.processLog : [],
+      unfinished: merged ? merged.unfinished : []
     });
   }
 
@@ -1160,36 +1683,53 @@ window.Assistant = (function () {
    * 按客企汇《盛付通在线客服系统用户信息接口 V1.1》拼接 hjUserData：
    * 姓名|性别|固定电话|手机|邮箱|地址|公司名称|用户区域|QQ|会员ID|会员类型|扩展信息
    * 每一段单独 UTF-8 urlencode，再用 | 拼接后挂到对话接入地址。
-   * 商户号写入「会员ID」，诊断结论与报告链接写入「扩展信息」。
+   * 姓名 / 公司名称 = 商户名称；会员ID = 商户号；
+   * 产品线/来源/原因/流水号/结论/报告链接写入「地址」；扩展信息留空。
    */
   function buildHjUserData(ctx, snap, reportUrl) {
     var m = merchant();
-    var summary = snap
-      ? (snap.result.primary ? snap.result.primary.summary : '5项排查均正常')
-      : (ctx.reason || '其他问题');
-    var ext = [
-      '产品线:' + m.line,
+    var bundles = resultBundles();
+    var multi = bundles.length > 1;
+    var summary;
+    if (multi) {
+      var abnCount = 0;
+      bundles.forEach(function (b) { abnCount += allAbnormals(b.result).length; });
+      summary = '多商户合并诊断·异常' + abnCount + '项·商户' + bundles.length + '个';
+    } else if (snap) {
+      summary = snap.result.primary ? snap.result.primary.summary : '5项排查均正常';
+    } else {
+      summary = ctx.reason || '其他问题';
+    }
+    var mchIds = multi
+      ? bundles.map(function (b) { return b.merchant.mchId; }).join(',')
+      : (m.mchId || '');
+    var address = [
+      '产品线:' + (multi ? '盛意旺(多商户)' : m.line),
       '来源:' + (cfg.platform === 'app' ? '盛意旺App' : '公众号'),
       '原因:' + (ctx.reason || ''),
-      snap ? ('流水号:' + snap.result.traceId) : '',
+      multi
+        ? ('商户号:' + mchIds)
+        : (snap ? ('流水号:' + snap.result.traceId) : ''),
       '结论:' + summary,
+      '自助记录:' + ((state.processLog || []).length) + '条',
+      '未完成异常:' + ((state.result ? buildMergedDiagnosisPayload().unfinished : []).length) + '项',
       '报告:' + reportUrl
     ].filter(Boolean).join(';');
 
     // 会员类型：文档约定 1=普通会员，2=代理商；自助服务侧均按普通会员传
     var fields = [
-      m.name || '',
+      multi ? (m.name + '等' + bundles.length + '户') : (m.name || ''),
       '0',
       '',
       m.phone || '',
       '',
-      '',
+      address,
       m.name || '',
       '',
       '',
-      m.mchId || '',
+      mchIds,
       '1',
-      ext
+      ''
     ];
     return fields.map(function (f) { return encodeURIComponent(f); }).join('|');
   }
@@ -1224,12 +1764,23 @@ window.Assistant = (function () {
     MSS.track('转人工携带快照', hasDiag ? snap.result.traceId : '无诊断快照（其他问题直接转接）');
     MSS.track('拼接 hjUserData', '会员ID ' + m.mchId + ' · 报告 ' + rec.id);
 
-    var chatText = '【自助诊断】' + m.name + '（商户号 ' + m.mchId + '，' + m.line + '）' +
-      (snap
-        ? '，诊断流水号 ' + snap.result.traceId +
-          (snap.result.primary ? '，结论：' + snap.result.primary.summary : '，5 项排查均正常')
-        : '，未执行自助诊断') +
-      '。完整报告：' + reportUrl;
+    var bundles = resultBundles();
+    var chatText;
+    if (bundles.length > 1) {
+      chatText = '【自助诊断·合并报告】共 ' + bundles.length + ' 个商户：' +
+        bundles.map(function (b) {
+          return b.merchant.name + '(' + b.merchant.mchId + ')';
+        }).join('、') +
+        '，自助处理 ' + (state.processLog || []).length + ' 条，未完成异常 ' +
+        (rec.data.unfinished ? rec.data.unfinished.length : 0) + ' 项。完整报告：' + reportUrl;
+    } else {
+      chatText = '【自助诊断】' + m.name + '（商户号 ' + m.mchId + '，' + m.line + '）' +
+        (snap
+          ? '，诊断流水号 ' + snap.result.traceId +
+            (snap.result.primary ? '，结论：' + snap.result.primary.summary : '，5 项排查均正常')
+          : '，未执行自助诊断') +
+        '。完整报告：' + reportUrl;
+    }
 
     var hjRows = built.preview.map(function (row) {
       return '<div><b>' + row.label + '</b>' + row.value + '</div>';
@@ -1240,14 +1791,14 @@ window.Assistant = (function () {
         '在线客服（codeKey ' + codeKey + '）· 商户信息已通过 hjUserData 同步，报告链接已复制</div>' +
       '<div class="agent-link">' +
         '<div class="al-head">人工客服会话地址' +
-          tip('按客企汇《用户信息接口 V1.1》，将 hjUserData 拼接到对话接入地址。字段顺序：姓名|性别|固话|手机|邮箱|地址|公司名称|用户区域|QQ|会员ID|会员类型|扩展信息；每项单独 UTF-8 urlencode。商户号写入会员ID，诊断结论与报告链接写入扩展信息。') +
+          tip('按客企汇《用户信息接口 V1.1》，将 hjUserData 拼接到对话接入地址。字段顺序：姓名|性别|固话|手机|邮箱|地址|公司名称|用户区域|QQ|会员ID|会员类型|扩展信息；每项单独 UTF-8 urlencode。姓名取商户名称；商户号写入会员ID；产品线/结论/报告链接等写入地址字段；扩展信息留空。') +
           '<span class="al-key">codeKey ' + codeKey + '</span></div>' +
         '<div class="al-base">' + cfg.agentUrl.split('?')[0] + '</div>' +
         '<div class="al-params">' +
           '<div><b>接口</b>hjUserData（客企汇官方）</div>' +
           '<div><b>会员ID</b>' + m.mchId + '</div>' +
-          '<div><b>公司名称</b>' + m.name + '</div>' +
-          '<div><b>扩展信息</b>产品线 / 结论 / 报告链接</div>' +
+          '<div><b>姓名</b>' + m.name + '</div>' +
+          '<div><b>地址</b>产品线 / 结论 / 报告链接</div>' +
         '</div>' +
         '<details class="al-raw"><summary>查看 hjUserData 字段明细</summary>' +
           '<div class="al-params" style="margin-top:8px">' + hjRows + '</div>' +
@@ -1255,15 +1806,19 @@ window.Assistant = (function () {
         '<button class="btn btn-primary" data-act="open-agent-url">打开人工客服会话</button>' +
       '</div>' +
       '<div class="auto-msg">' +
-        '<div class="am-head">诊断报告独立链接（扩展信息 + 剪贴板兜底）' +
-          tip('完整诊断明细放在独立报告页，链接写入 hjUserData 扩展信息供客服在工作台查看；同时复制到剪贴板，若客服端未展示扩展信息，商户可粘贴发送。') +
+        '<div class="am-head">诊断报告独立链接（地址字段 + 剪贴板兜底）' +
+          tip('完整诊断明细放在独立报告页，链接写入 hjUserData 地址字段供客服在工作台查看；同时复制到剪贴板，若客服端未展示该字段，商户可粘贴发送。') +
           '<span class="am-tag">已复制</span></div>' +
         '<div class="am-card">' +
-          '<div class="am-title">' + (snap
-            ? '【自助诊断报告】' + (snap.result.primary ? snap.result.primary.summary : '5 项排查均正常')
-            : '【商户档案】' + m.name + '（' + m.line + '）') + '</div>' +
-          '<div class="am-desc">商户号 ' + m.mchId + ' · ' + m.line +
-            (snap ? ' · 流水号 ' + snap.result.traceId : '') + '，点击查看完整报告与结算信息</div>' +
+          '<div class="am-title">' + (bundles.length > 1
+            ? '【合并诊断报告】' + bundles.length + ' 个商户'
+            : (snap
+              ? '【自助诊断报告】' + (snap.result.primary ? snap.result.primary.summary : '5 项排查均正常')
+              : '【商户档案】' + m.name + '（' + m.line + '）')) + '</div>' +
+          '<div class="am-desc">' + (bundles.length > 1
+            ? '含自助过程记录与未完成异常 · 点击查看完整合并报告'
+            : ('商户号 ' + m.mchId + ' · ' + m.line +
+              (snap ? ' · 流水号 ' + snap.result.traceId : '') + '，点击查看完整报告与结算信息')) + '</div>' +
           '<div class="am-url">' + reportUrl + '</div>' +
           '<div class="am-btns">' +
             '<button class="btn btn-ghost" data-act="copy-msg">复制会话消息</button>' +

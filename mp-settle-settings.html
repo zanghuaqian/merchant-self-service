@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>结算设置 · 盛意旺小程序</title>
+  <link rel="stylesheet" href="assets/css/base.css?v=mchcard1">
+  <link rel="stylesheet" href="assets/css/app.css?v=settle2">
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #f2f4f9;
+      font-family: var(--font);
+    }
+    .mp-shell {
+      max-width: 420px;
+      margin: 0 auto;
+      min-height: 100vh;
+      background: #f2f4f9;
+      display: flex;
+      flex-direction: column;
+    }
+    .mp-top {
+      background: #fff;
+      border-bottom: 1px solid var(--line);
+      flex: 0 0 auto;
+    }
+    .mp-nav {
+      height: 44px;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      position: relative;
+    }
+    .mp-title {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 17px;
+      font-weight: 600;
+    }
+    .mp-capsule {
+      margin-left: auto;
+      width: 78px;
+      height: 28px;
+      border: 1px solid #e5e5e5;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      justify-content: space-evenly;
+      background: rgba(255,255,255,0.9);
+    }
+    .mp-capsule i {
+      display: block;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #333;
+      opacity: 0.55;
+    }
+    .mp-capsule .mp-dots { width: 18px; height: 4px; border-radius: 2px; background:
+      radial-gradient(circle, #333 1.5px, transparent 2px) 0 50%/6px 4px,
+      radial-gradient(circle, #333 1.5px, transparent 2px) 6px 50%/6px 4px,
+      radial-gradient(circle, #333 1.5px, transparent 2px) 12px 50%/6px 4px;
+      opacity: 0.7;
+    }
+    .mp-tip {
+      margin: 12px 14px 0;
+      background: #e8f2ff;
+      color: #0a5fd8;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 12.5px;
+      line-height: 1.65;
+    }
+  </style>
+</head>
+<body>
+  <div class="mp-shell">
+    <div class="mp-top">
+      <div class="status-bar light"><span>9:41</span><span>■■■</span></div>
+      <div class="mp-nav">
+        <span class="mp-title">结算设置</span>
+        <span class="mp-capsule" aria-hidden="true"><i class="mp-dots"></i><i class="mp-close"></i></span>
+      </div>
+    </div>
+    <div class="mp-tip">演示：客服分享的小程序结算设置页。商户可开启自动结算或发起自助结算。</div>
+    <div class="settle-body" id="settleSettingsBody" style="flex:1"></div>
+  </div>
+  <div class="toast" id="toast" style="display:none"></div>
+
+  <script src="assets/js/mock.js?v=settle2"></script>
+  <script src="assets/js/settle-settings.js?v=2"></script>
+  <script>
+    (function () {
+      var q = new URLSearchParams(location.search);
+      var mchId = q.get('mchId') || '88800213';
+      var m = MSS.findByMchId(mchId) || MSS.MERCHANTS.syw;
+
+      window.UI = window.UI || {
+        toast: function (msg) {
+          var t = document.getElementById('toast');
+          t.style.cssText = 'position:fixed;left:50%;bottom:40px;transform:translateX(-50%);background:rgba(0,0,0,.78);color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;z-index:99;max-width:80%;text-align:center;line-height:1.5';
+          t.innerHTML = msg;
+          t.style.display = 'block';
+          clearTimeout(t._t);
+          t._t = setTimeout(function () { t.style.display = 'none'; }, 2000);
+        },
+        go: function () { /* standalone */ }
+      };
+
+      SettleSettings.init({ getMerchant: function () { return m; } });
+      SettleSettings.setContext({ embed: true, fromDiagnosis: false });
+      SettleSettings.renderSettings('settleSettingsBody');
+      MSS.track('打开小程序结算设置页', '商户号 ' + m.mchId + ' · from=' + (q.get('from') || 'direct'));
+    })();
+  </script>
+</body>
+</html>

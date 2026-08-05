@@ -1,7 +1,6 @@
 /**
  * 场景二：盛意旺公众号（PRD 3.2）
- * 会话底部菜单 → 自助客服 H5 → 绑定态判断（游客 / 盛意旺 / 线下）→ 诊断链路
- * 绑定方式：完整商户号（6-8 位）+ 预留手机号短信验证码，服务端保存 OpenID ↔ 商户号关联
+ * 绑定：预留手机号 + 短信验证码；多商户多选；线下仅引导登录 App；游客无人工入口
  */
 (function () {
   var screen = document.getElementById('screen');
@@ -10,22 +9,27 @@
   var GUEST = { name: '微信用户', mchId: '未绑定', line: '未识别', lineCode: 'GUEST', selfServiceEnabled: false };
 
   var BIND_PRESETS = [
-    { id: 'guest', name: '未绑定 / 游客', desc: '进入受限首页，点击诊断触发绑定引导', seed: [] },
-    { id: 'single', name: '已绑定 · 单个盛意旺商户', desc: '与 App 完全一致的诊断与自助修复链路', seed: ['88800213'] },
-    { id: 'multi', name: '已绑定 · 多个商户号', desc: '默认上次商户，可切换（含线下商户）', seed: ['88800213', '7712009', '620188'], last: '7712009' },
-    { id: 'offline', name: '已绑定 · 仅线下商户', desc: '提示暂未开通自助服务并自动转人工', seed: ['620188'] }
+    { id: 'guest', name: '未绑定 / 游客', desc: '受限首页，无人工客服入口', seed: [] },
+    { id: 'single', name: '已绑定 · 单个盛意旺商户', desc: '与 App 一致的诊断与自助修复', seed: ['88800213'] },
+    { id: 'multi', name: '已绑定 · 多个盛意旺商户', desc: '同时诊断多个商户，转人工合并报告', seed: ['88800213', '7712009'], last: '88800213' },
+    { id: 'offline', name: '线下商户访问', desc: '仅引导登录 App，不绑定、不转人工', seed: [], offline: true }
   ];
 
   var presetId = 'guest';
+  var pendingPhoneMerchants = [];
+  var offlineOnlyMode = false;
 
   function boundMerchants() { return MSS.bindStore.boundMerchants(); }
 
+  function sywMerchants() {
+    return boundMerchants().filter(function (m) { return m.selfServiceEnabled; });
+  }
+
   function merchant() { return MSS.bindStore.current() || GUEST; }
 
-  function isBound() { return boundMerchants().length > 0; }
+  function isBound() { return sywMerchants().length > 0; }
 
   UI.mountStatusBars(document);
-
   MSS.bindStore.clear();
 
   Assistant.init({
@@ -33,24 +37,27 @@
     platform: 'h5',
     homeView: 'asst-home',
     getMerchant: merchant,
-    getMerchantList: boundMerchants,
+    getMerchantList: sywMerchants,
+    getDiagnoseMerchants: sywMerchants,
     agentUrl: 'https://chat.keqihui.com/any800/echatManager.do?companyPk=2c908e0f63b5e1e60163b5e5b7940001&codeKey=33',
     getScenarioId: function () { return scenarioId; },
     onSwitchMerchant: switchMerchant,
     onAddMerchant: function () { openBind(); }
   });
 
-  /* ------------------------------ 商户切换 ------------------------------ */
+  if (window.SettleSettings) {
+    SettleSettings.init({ getMerchant: merchant });
+  }
 
   function switchMerchant(m) {
+    if (!m.selfServiceEnabled) {
+      MSS.track('线下商户拦截', m.mchId + ' · 引导登录 App');
+      showOffline(m);
+      return;
+    }
     MSS.bindStore.setLast(m.mchId);
     syncConsole();
     Assistant.clearDiagnosis();
-    if (!m.selfServiceEnabled) {
-      MSS.track('切换到线下商户', m.mchId + ' · 暂未开通自助服务');
-      showOffline();
-      return;
-    }
     Assistant.renderHome();
     UI.go('asst-home', { reset: true });
     UI.toast('已切换至「' + m.name + '」<br>商户号 ' + m.mchId);
@@ -79,29 +86,28 @@
     menuBtn.classList.remove('is-open');
   }
 
-  /* ------------------------------ 进入自助客服 H5 ------------------------------ */
-
   function openSelfService() {
     closeMenu();
     MSS.track('助手入口点击', '公众号菜单：商户服务 → 自助客服');
 
+    if (offlineOnlyMode) {
+      showOffline();
+      return;
+    }
+
     if (!isBound()) {
-      MSS.track('绑定状态判断', '未绑定 → 受限首页');
+      MSS.track('绑定状态判断', '未绑定 → 受限首页（无人工入口）');
       UI.go('h5-limited', { reset: true });
       return;
     }
 
-    var m = merchant();
-    var total = boundMerchants().length;
-    if (!m.selfServiceEnabled) {
-      MSS.track('绑定状态判断', '线下商户 ' + m.mchId + ' → 暂未开通自助服务');
-      showOffline();
-      return;
-    }
-    MSS.track('绑定状态判断', '已绑定 ' + total + ' 个商户，默认使用上次商户 ' + m.mchId);
+    var list = sywMerchants();
+    MSS.track('绑定状态判断', '已绑定 ' + list.length + ' 个盛意旺商户');
     Assistant.renderHome();
     UI.go('asst-home', { reset: true });
-    if (total > 1) UI.toast('默认使用上次查询的商户「' + m.name + '」<br>可点右上角切换商户');
+    if (list.length > 1) {
+      UI.toast('已绑定 ' + list.length + ' 个商户<br>诊断将对所选商户同时执行');
+    }
   }
 
   document.querySelectorAll('[data-act="open-self-service"]').forEach(function (b) {
@@ -109,50 +115,42 @@
   });
 
   document.querySelectorAll('[data-act="to-chat"]').forEach(function (b) {
-    b.onclick = function () { clearTimeout(offlineTimer); UI.go('home', { reset: true }); };
+    b.onclick = function () { UI.go('home', { reset: true }); };
   });
 
   document.querySelectorAll('[data-act="back-asst"]').forEach(function (b) {
-    b.onclick = function () { UI.go('asst-home', { reset: true }); };
+    b.onclick = function () {
+      if (!isBound()) { UI.go('h5-limited', { reset: true }); return; }
+      UI.go('asst-home', { reset: true });
+    };
   });
 
+  /* 游客不提供人工客服；已绑定盛意旺才可转人工 */
   document.querySelectorAll('[data-act="open-agent"]').forEach(function (b) {
     b.onclick = function () {
       closeMenu();
-      clearTimeout(offlineTimer);
-      Assistant.clearDiagnosis();
+      if (!isBound()) {
+        UI.toast('请先绑定手机号后再使用人工客服');
+        return;
+      }
       Assistant.toAgent({
         mode: 'queue',
-        reason: !isBound() ? '公众号人工客服入口（未绑定商户号）'
-          : merchant().selfServiceEnabled ? '公众号人工客服入口' : '线下商户暂未开通自助服务'
+        reason: '公众号人工客服入口'
       });
     };
   });
 
-  /* ------------------------------ 线下商户自动转人工 ------------------------------ */
+  /* ------------------------------ 线下商户：仅引导登录 App ------------------------------ */
 
-  var offlineTimer = null;
-
-  function showOffline() {
-    var m = merchant();
-    document.getElementById('offlineMch').textContent = MSS.maskMchId(m.mchId);
+  function showOffline(m) {
+    m = m || { mchId: '线下商户', name: '线下收单商户' };
+    var el = document.getElementById('offlineMch');
+    if (el) el.textContent = MSS.maskMchId(m.mchId);
+    MSS.track('线下商户引导', '仅引导登录 App，不绑定、不转人工');
     UI.go('offline', { reset: true });
-    var n = 3;
-    var el = document.getElementById('offlineCount');
-    el.textContent = n;
-    clearTimeout(offlineTimer);
-    (function tick() {
-      offlineTimer = setTimeout(function () {
-        n--;
-        el.textContent = n;
-        if (n <= 0) {
-          Assistant.toAgent({ mode: 'queue', reason: '线下商户暂未开通自助服务（自动转接）', autoOpen: false });
-        } else tick();
-      }, 1000);
-    })();
   }
 
-  /* ------------------------------ 游客受限首页（4.5） ------------------------------ */
+  /* ------------------------------ 游客受限首页 ------------------------------ */
 
   document.getElementById('guestFaq').innerHTML = Assistant.FAQS.map(function (f, i) {
     return '<button class="faq-item" data-gfaq="' + i + '"><span class="q-badge">Q</span>' + f.q +
@@ -172,26 +170,17 @@
     };
   });
 
-  /* 未绑定用户点击诊断类按钮 → 返回图文消息引导绑定 */
   document.querySelector('[data-act="need-bind"]').onclick = function () {
-    MSS.track('未绑定拦截', '点击资金未到账 → 下发绑定引导图文消息');
+    MSS.track('未绑定拦截', '点击资金未到账 → 引导手机号绑定');
     pushBindArticle();
-
     var mk = UI.mask(
       '<div class="sheet">' +
-        '<div class="sheet-head"><div><h3>需要先绑定商户号</h3>' +
-          '<p>诊断需读取你的商户后台数据，已向会话下发绑定引导消息</p></div>' +
+        '<div class="sheet-head"><div><h3>需要先绑定手机号</h3>' +
+          '<p>验证商户预留手机号后即可使用自助诊断</p></div>' +
           '<button class="sheet-close">✕</button></div>' +
-        '<div class="tpl-msg">' +
-          '<div class="t-head"><h4>【绑定提醒】完成绑定即可自助排查未到账</h4>' +
-            '<p>你好！绑定商户号后可一键排查风控、资质、结算、出款与分账 5 类未到账原因，平均 10 秒出结论。</p></div>' +
-          '<div class="t-row"><span class="k">适用产品线</span><span>盛意旺</span></div>' +
-          '<div class="t-row"><span class="k">绑定方式</span><span>完整商户号 + 预留手机号验证码</span></div>' +
-          '<button class="t-link" data-act="go-bind">点击此处立即绑定 <span>›</span></button>' +
-        '</div>' +
-        '<div class="btn-row"><button class="btn btn-ghost" data-act="close">稍后再说</button></div>' +
+        '<div class="btn-row"><button class="btn btn-primary" data-act="go-bind">立即绑定</button>' +
+          '<button class="btn btn-ghost" data-act="close">稍后再说</button></div>' +
       '</div>');
-
     mk.querySelector('.sheet-close').onclick = function () { UI.close(mk); };
     mk.querySelector('[data-act="close"]').onclick = function () { UI.close(mk); };
     mk.querySelector('[data-act="go-bind"]').onclick = function () {
@@ -208,8 +197,8 @@
       '<div class="wx-date">' + MSS.formatTime(new Date()).slice(5, 16) + '</div>' +
       '<div class="wx-article" data-bind-msg>' +
         '<div class="wa-body">' +
-          '<div class="wa-title">【绑定提醒】绑定商户号，解锁资金未到账自助诊断</div>' +
-          '<div class="wa-desc">检测到你尚未绑定商户号，输入商户号并通过预留手机号验证码校验即可完成绑定。</div>' +
+          '<div class="wa-title">【绑定提醒】验证手机号，解锁资金未到账自助诊断</div>' +
+          '<div class="wa-desc">使用商户预留手机号完成短信验证即可绑定，支持一次绑定多个商户号。</div>' +
         '</div>' +
         '<button class="wa-more" data-act="open-bind">点击此处立即绑定 <span>›</span></button>' +
       '</div>';
@@ -217,22 +206,21 @@
     chat.querySelector('[data-bind-msg] [data-act="open-bind"]').onclick = openBind;
   }
 
-  /* ------------------ 绑定：完整商户号 + 手机验证码（4.1） ------------------ */
+  /* ------------------ 绑定：手机号 + 验证码 + 多选 ------------------ */
 
-  var mchIdInput = document.getElementById('mchIdInput');
+  var phoneInput = document.getElementById('phoneInput');
   var codeInput = document.getElementById('codeInput');
   var btnCode = document.getElementById('btnCode');
   var btnBind = document.getElementById('btnBind');
-  var mchFound = document.getElementById('mchFound');
-  var mchPhone = document.getElementById('mchPhone');
   var bindErr = document.getElementById('bindErr');
   var codeTimer = null;
   var codeSent = false;
 
   function openBind() {
     closeMenu();
+    offlineOnlyMode = false;
     resetBindForm();
-    MSS.track('进入绑定引导', isBound() ? '追加绑定商户号' : '首次绑定');
+    MSS.track('进入绑定引导', isBound() ? '追加绑定' : '首次绑定');
     UI.go('bind', { reset: true });
   }
 
@@ -241,14 +229,13 @@
   function resetBindForm() {
     clearInterval(codeTimer);
     codeSent = false;
-    mchIdInput.value = '';
-    codeInput.value = '';
-    mchFound.innerHTML = '';
-    mchFound.className = 'mch-found';
-    mchPhone.textContent = '输入商户号后自动带出';
-    btnCode.disabled = true;
-    btnCode.textContent = '获取验证码';
+    pendingPhoneMerchants = [];
+    if (phoneInput) phoneInput.value = '';
+    if (codeInput) codeInput.value = '';
+    if (btnCode) { btnCode.disabled = false; btnCode.textContent = '获取验证码'; }
     showErr('');
+    var pe = document.getElementById('pickErr');
+    if (pe) { pe.textContent = ''; pe.classList.remove('is-show'); }
   }
 
   function showErr(msg) {
@@ -256,98 +243,131 @@
     bindErr.classList.toggle('is-show', !!msg);
   }
 
-  /** 输入商户号即校验格式并带出商户信息与预留手机号 */
-  mchIdInput.addEventListener('input', function () {
-    mchIdInput.value = mchIdInput.value.replace(/\D/g, '').slice(0, 8);
-    showErr('');
-    var v = mchIdInput.value;
+  if (phoneInput) {
+    phoneInput.addEventListener('input', function () {
+      phoneInput.value = phoneInput.value.replace(/\D/g, '').slice(0, 11);
+      showErr('');
+    });
+  }
 
-    if (v.length < 6) {
-      mchFound.innerHTML = v.length ? '<span class="mf-tip">商户号为 6-8 位数字</span>' : '';
-      mchFound.className = 'mch-found';
-      mchPhone.textContent = '输入商户号后自动带出';
+  if (codeInput) {
+    codeInput.addEventListener('input', function () {
+      codeInput.value = codeInput.value.replace(/\D/g, '').slice(0, 6);
+      showErr('');
+    });
+  }
+
+  if (btnCode) {
+    btnCode.onclick = function () {
+      var check = MSS.validatePhone(phoneInput.value);
+      if (!check.ok) { showErr(check.msg); return; }
+
+      codeSent = true;
       btnCode.disabled = true;
-      return;
-    }
+      MSS.track('发送验证码', '手机号 ' + check.masked + ' · 关联 ' + check.merchants.length + ' 个商户');
+      UI.toast('验证码已发送至 ' + check.masked + '<br>演示环境固定为 123456');
 
-    var m = MSS.findByMchId(v);
-    if (!m) {
-      mchFound.className = 'mch-found bad';
-      mchFound.innerHTML = '未查询到该商户号，请确认后重试';
-      mchPhone.textContent = '—';
-      btnCode.disabled = true;
-      return;
-    }
-
-    if (MSS.bindStore.load().merchants.indexOf(v) > -1) {
-      mchFound.className = 'mch-found bad';
-      mchFound.innerHTML = '该商户号已绑定当前微信，可直接在助手内切换使用';
-      btnCode.disabled = true;
-      return;
-    }
-
-    mchFound.className = 'mch-found ok';
-    mchFound.innerHTML = '<b>' + m.name + '</b><em class="line-tag ' + (m.lineCode === 'SYW' ? 'syw' : 'offline') + '">' +
-      m.line + '</em>' + (m.selfServiceEnabled ? '' : '<span class="mf-tip">该业务线暂未开通自助诊断</span>');
-    mchPhone.textContent = m.phone;
-    btnCode.disabled = codeSent;
-  });
-
-  codeInput.addEventListener('input', function () {
-    codeInput.value = codeInput.value.replace(/\D/g, '').slice(0, 6);
-    showErr('');
-  });
-
-  btnCode.onclick = function () {
-    var check = MSS.validateMchId(mchIdInput.value);
-    if (!check.ok) { showErr(check.msg); return; }
-
-    codeSent = true;
-    btnCode.disabled = true;
-    MSS.track('发送验证码', '商户 ' + check.merchant.mchId + ' 预留手机号 ' + check.merchant.phone);
-    UI.toast('验证码已发送至 ' + check.merchant.phone + '<br>演示环境固定为 123456');
-
-    var left = 60;
-    btnCode.textContent = left + 's 后重发';
-    codeTimer = setInterval(function () {
-      left--;
+      var left = 60;
       btnCode.textContent = left + 's 后重发';
-      if (left <= 0) {
-        clearInterval(codeTimer);
-        codeSent = false;
-        btnCode.textContent = '重新获取';
-        btnCode.disabled = false;
+      codeTimer = setInterval(function () {
+        left--;
+        btnCode.textContent = left + 's 后重发';
+        if (left <= 0) {
+          clearInterval(codeTimer);
+          codeSent = false;
+          btnCode.textContent = '重新获取';
+          btnCode.disabled = false;
+        }
+      }, 1000);
+    };
+  }
+
+  if (btnBind) {
+    btnBind.onclick = function () {
+      var phoneCheck = MSS.validatePhone(phoneInput.value);
+      if (!phoneCheck.ok) { showErr(phoneCheck.msg); return; }
+      if (!codeSent && !codeInput.value) { showErr('请先获取并输入短信验证码'); return; }
+
+      var codeCheck = MSS.validateCode(codeInput.value);
+      if (!codeCheck.ok) {
+        showErr(codeCheck.msg);
+        MSS.track('绑定校验失败', '验证码错误');
+        return;
       }
-    }, 1000);
-  };
 
-  btnBind.onclick = function () {
-    var check = MSS.validateMchId(mchIdInput.value);
-    if (!check.ok) { showErr(check.msg); return; }
-    if (!codeSent && !codeInput.value) { showErr('请先获取并输入短信验证码'); return; }
+      clearInterval(codeTimer);
+      pendingPhoneMerchants = phoneCheck.merchants.slice();
+      var syw = pendingPhoneMerchants.filter(function (m) { return m.selfServiceEnabled; });
+      var offline = pendingPhoneMerchants.filter(function (m) { return !m.selfServiceEnabled; });
 
-    var codeCheck = MSS.validateCode(codeInput.value);
-    if (!codeCheck.ok) {
-      showErr(codeCheck.msg);
-      MSS.track('绑定校验失败', '验证码错误（商户 ' + mchIdInput.value + '）');
+      MSS.track('手机号验证通过', phoneCheck.masked + ' · 盛意旺 ' + syw.length + ' · 线下 ' + offline.length);
+
+      /* 仅线下：不绑定，引导登录 App */
+      if (!syw.length) {
+        offlineOnlyMode = true;
+        showOffline(offline[0]);
+        return;
+      }
+
+      /* 单个盛意旺：直接绑定（若同时有线下则忽略线下） */
+      if (syw.length === 1) {
+        finishBind(syw.map(function (m) { return m.mchId; }));
+        return;
+      }
+
+      /* 多个盛意旺：进入多选 */
+      renderMchPick(syw);
+      UI.go('bind-select', { reset: true });
+    };
+  }
+
+  function renderMchPick(list) {
+    var box = document.getElementById('mchPickList');
+    box.innerHTML = list.map(function (m) {
+      return '<label class="mch-pick">' +
+        '<input type="checkbox" data-pick="' + m.mchId + '" checked>' +
+        '<span class="mp-body"><span class="mp-name">' + m.name + '</span>' +
+        '<span class="mp-meta">商户号 ' + m.mchId + ' · ' + m.line + '</span></span></label>';
+    }).join('');
+  }
+
+  function finishBind(mchIds) {
+    if (!mchIds.length) {
+      UI.toast('请至少选择一个商户号');
       return;
     }
-
-    clearInterval(codeTimer);
-    var m = check.merchant;
-    var data = MSS.bindStore.bind(m.mchId);
+    var data = MSS.bindStore.bindMany(mchIds, mchIds[0]);
+    offlineOnlyMode = false;
     presetId = '';
     syncConsole();
-    MSS.track('绑定成功', 'OpenID ' + data.openId + ' ↔ 商户号 ' + m.mchId + '（' + m.line + '）');
-    MSS.track('绑定关系已保存', '服务端当前绑定 ' + data.merchants.length + ' 个商户号');
+    MSS.track('绑定成功', 'OpenID ↔ ' + mchIds.join(',') + '（共 ' + mchIds.length + ' 个）');
     UI.toast('绑定成功，正在进入自助服务…');
-
     setTimeout(function () {
-      if (!m.selfServiceEnabled) { showOffline(); return; }
       Assistant.renderHome();
       UI.go('asst-home', { reset: true });
-    }, 1100);
-  };
+      if (mchIds.length > 1) {
+        UI.toast('已绑定 ' + mchIds.length + ' 个商户<br>诊断将对全部绑定商户执行');
+      }
+    }, 900);
+  }
+
+  var btnConfirmPick = document.getElementById('btnConfirmPick');
+  if (btnConfirmPick) {
+    btnConfirmPick.onclick = function () {
+      var picked = [];
+      document.querySelectorAll('#mchPickList [data-pick]:checked').forEach(function (el) {
+        picked.push(el.getAttribute('data-pick'));
+      });
+      var pe = document.getElementById('pickErr');
+      if (!picked.length) {
+        pe.textContent = '请至少勾选一个商户号';
+        pe.classList.add('is-show');
+        return;
+      }
+      pe.classList.remove('is-show');
+      finishBind(picked);
+    };
+  }
 
   /* ------------------------------ 演示控制台 ------------------------------ */
 
@@ -365,9 +385,9 @@
     btn.onclick = function () {
       var preset = BIND_PRESETS.filter(function (p) { return p.id === btn.dataset.bs; })[0];
       presetId = preset.id;
-      if (preset.seed.length) MSS.bindStore.seed(preset.seed, preset.last);
+      offlineOnlyMode = !!preset.offline;
+      if (preset.seed && preset.seed.length) MSS.bindStore.seed(preset.seed, preset.last);
       else MSS.bindStore.clear();
-      clearTimeout(offlineTimer);
       syncConsole();
       Assistant.clearDiagnosis();
       UI.go('home', { reset: true });
@@ -396,22 +416,27 @@
     });
 
     var data = MSS.bindStore.load();
-    var list = boundMerchants();
+    var list = sywMerchants();
+
+    if (offlineOnlyMode) {
+      mchBox.innerHTML = '演示状态：<b>线下商户访问</b><br>能力：仅引导登录盛意旺 App<br>不绑定商户号 · 不引导人工客服';
+      return;
+    }
 
     if (!list.length) {
       mchBox.innerHTML = '服务端绑定关系：<b>无</b><br>微信身份：<b>OpenID ' + data.openId + '</b><br>' +
-        '可用能力：常见问题、人工客服<br>绑定方式：完整商户号 + 预留手机号验证码';
+        '可用能力：常见问题、手机号绑定<br>游客不展示人工客服入口';
       return;
     }
 
     var cur = merchant();
     mchBox.innerHTML = '微信 OpenID：<b>' + data.openId + '</b><br>' +
-      '已绑定商户（' + list.length + '）：<br>' +
+      '已绑定盛意旺商户（' + list.length + '）：<br>' +
       list.map(function (m) {
-        return '&nbsp;· <b>' + m.mchId + '</b> ' + m.name + '（' + m.line + '）' +
+        return '&nbsp;· <b>' + m.mchId + '</b> ' + m.name +
           (m.mchId === cur.mchId ? ' <b style="color:#1677ff">← 当前</b>' : '');
       }).join('<br>') +
-      '<br>上次使用：<b>' + (data.lastMchId || '—') + '</b><br>绑定时间：' + (data.boundAt || '—');
+      '<br>诊断范围：全部绑定商户 · 转人工合并报告';
   }
 
   syncConsole();
@@ -426,9 +451,9 @@
 
   document.getElementById('btnReset').onclick = function () {
     MSS.clearLog();
-    clearTimeout(offlineTimer);
     MSS.bindStore.clear();
     presetId = 'guest';
+    offlineOnlyMode = false;
     scenarioId = 'qualification';
     resetBindForm();
     syncConsole();

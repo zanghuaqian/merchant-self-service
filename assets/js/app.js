@@ -21,6 +21,10 @@
     getScenarioId: function () { return scenarioId; }
   });
 
+  SettleSettings.init({
+    getMerchant: function () { return merchant; }
+  });
+
   /* ------------------------------ 底导模板同步 ------------------------------ */
 
   var tabbarTemplate = screen.querySelector('[data-view="home"] [data-tabbar]');
@@ -64,6 +68,7 @@
       return;
     }
     if (key === 'me') {
+      SettleSettings.renderMe();
       UI.go('me', { reset: true });
       return;
     }
@@ -86,6 +91,33 @@
     if (act === 'back-app') {
       e.preventDefault();
       goTab('home');
+      return;
+    }
+
+    if (act === 'back-me') {
+      e.preventDefault();
+      goTab('me');
+      return;
+    }
+
+    if (act === 'back-account') {
+      e.preventDefault();
+      SettleSettings.renderAccount();
+      UI.go('account', { reset: true });
+      return;
+    }
+
+    if (act === 'back-settle-settings') {
+      e.preventDefault();
+      SettleSettings.renderSettings();
+      UI.go('settle-settings', { reset: true });
+      return;
+    }
+
+    if (act === 'back-settle-diagnosis') {
+      e.preventDefault();
+      if (window.SettleSettings) SettleSettings.setContext({});
+      UI.go('asst-result', { animate: false });
       return;
     }
 

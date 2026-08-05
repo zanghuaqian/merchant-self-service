@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>盛意旺 App · 自助服务助手（演示）</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-<link rel="stylesheet" href="assets/css/base.css?v=rediag1">
-<link rel="stylesheet" href="assets/css/app.css?v=tab5">
+<link rel="stylesheet" href="assets/css/base.css?v=card1">
+<link rel="stylesheet" href="assets/css/app.css?v=settle2">
   <link rel="stylesheet" href="assets/annotation/product-annotation.css">
 </head>
 <body>
@@ -226,18 +226,63 @@
         </section>
 
         <section class="view" data-view="me">
+          <div class="me-top">
+            <div data-statusbar="light"></div>
+            <div class="me-nav">我的</div>
+          </div>
+          <div class="view-body me-body" id="meBody"></div>
+          <nav class="tabbar" data-tabbar></nav>
+        </section>
+
+        <!-- ---------------- 我的账户 ---------------- -->
+        <section class="view" data-view="account">
           <div class="asst-nav">
             <div data-statusbar="light"></div>
-            <div class="nav-bar">我的</div>
-          </div>
-          <div class="view-body stub-page">
-            <div class="stub-card">
-              <div class="stub-ico me">我</div>
-              <h2>我的</h2>
-              <p>演示环境底导路由占位页，正式环境展示商户中心。</p>
+            <div class="nav-bar">
+              <div class="nav-left"><button data-act="back-me" type="button" aria-label="返回">‹</button></div>
+              <span class="nav-title">我的账户</span>
             </div>
           </div>
-          <nav class="tabbar" data-tabbar></nav>
+          <div class="view-body acct-body" id="accountBody"></div>
+        </section>
+
+        <!-- ---------------- 结算设置 ---------------- -->
+        <section class="view" data-view="settle-settings">
+          <div class="asst-nav">
+            <div data-statusbar="light"></div>
+            <div class="nav-bar">
+              <div class="nav-left"><button data-act="back-account" type="button" aria-label="返回">‹</button></div>
+              <span class="nav-title">结算设置
+                <span class="tooltip-icon"><i class="bi bi-lightbulb-fill"></i></span>
+                <div class="product-tip"><div class="product-tip-content">可查看结算周期（只读），修改日切时间、自动结算开关与留存金额；关闭自动结算时可发起自助结算。修改记录可追溯变更前后值。</div></div>
+              </span>
+            </div>
+          </div>
+          <div class="view-body settle-body" id="settleSettingsBody"></div>
+        </section>
+
+        <!-- ---------------- 自助结算 ---------------- -->
+        <section class="view" data-view="settle-self">
+          <div class="asst-nav">
+            <div data-statusbar="light"></div>
+            <div class="nav-bar">
+              <div class="nav-left"><button data-act="back-settle-settings" type="button" aria-label="返回">‹</button></div>
+              <span class="nav-title">自助结算</span>
+            </div>
+          </div>
+          <div class="view-body settle-body" id="settleSelfBody"></div>
+        </section>
+
+        <!-- ---------------- 结算修改记录 ---------------- -->
+        <section class="view" data-view="settle-history">
+          <div class="asst-nav">
+            <div data-statusbar="light"></div>
+            <div class="nav-bar">
+              <div class="nav-left"><button data-act="back-settle-settings" type="button" aria-label="返回">‹</button></div>
+              <span class="nav-title">修改记录</span>
+            </div>
+          </div>
+          <div class="view-body settle-body" id="settleHistoryBody"></div>
         </section>
 
         <!-- ---------------- 自助服务助手首页 ---------------- -->
@@ -338,9 +383,10 @@
 </div>
 
 <script src="assets/js/annotation.js?v=ro1"></script>
-<script src="assets/js/mock.js?v=payout2"></script>
-<script src="assets/js/assistant.js?v=rediag1"></script>
-<script src="assets/js/app.js?v=ro1"></script>
+<script src="assets/js/mock.js?v=card1"></script>
+<script src="assets/js/assistant.js?v=card1"></script>
+<script src="assets/js/settle-settings.js?v=2"></script>
+<script src="assets/js/app.js?v=settle2"></script>
   <script src="assets/annotation/product-annotation.js" defer></script>
 </body>
 </html>
