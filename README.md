@@ -86,11 +86,11 @@ App 与公众号复用 `assistant.js` + `mock.js`，对应 PRD 3.2「诊断流�
 
 ### 诊断报告独立链接
 
-转人工时生成独立报告页，链接固定为 GitHub Pages 公网地址：
+转人工时生成独立报告短链（GitHub Pages），仅携带诊断流水号：
 
-`https://zanghuaqian.github.io/merchant-self-service/report.html?id=rpt_xxx&token=xxx#d=…`
+`https://zanghuaqian.github.io/merchant-self-service/report.html?t=diag_xxxxxxxx`
 
-诊断数据编码在 URL hash 中，他人打开即可查看（不依赖本机 localStorage），有效期 2 小时。
+（若远程备份成功会附加 `&r=`，便于他人跨设备打开；有效期 2 小时。）
 
 - 报告 ID 与令牌均为随机值，**不可枚举**；有效期 2 小时，过期或令牌不符直接拒绝访问
 - 报告内容按脱敏规则展示（账户名、卡号、证件号均打码），不含完整卡号与证件信息
@@ -130,7 +130,7 @@ App 与公众号复用 `assistant.js` + `mock.js`，对应 PRD 3.2「诊断流�
 | 层级 | 做法 | 状态 |
 |---|---|---|
 | ① 官方 `hjUserData` | 会员ID=商户号，地址=诊断结论，扩展信息=报告链接 | **已接入（待客服端确认展示）** |
-| ② 独立报告页 | GitHub Pages 公网链接 + `#d=` 载荷，2 小时有效，他人可直接打开 | **已可用** |
+| ② 独立报告页 | 短链 `report.html?t=诊断流水号`（GitHub Pages），2 小时有效 | **已可用** |
 | ③ 剪贴板兜底 | 跳转前复制「商户号+结论+报告链接」，商户粘贴发送 | **已可用** |
 
 ### 实测与待确认

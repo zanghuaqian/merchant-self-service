@@ -130,15 +130,20 @@
     (function () {
       var q = new URLSearchParams(window.location.search);
       var shared = MSS.reportStore.loadShared(window.location.hash);
-      var res = (shared && shared.ok) ? shared
-        : (shared && shared.ok === false) ? shared
-        : MSS.reportStore.load(q.get('id'), q.get('token'));
+      var res;
+      if (shared && (shared.ok === true || shared.ok === false)) {
+        res = shared;
+      } else if (q.get('t')) {
+        res = MSS.reportStore.loadByTrace(q.get('t'), q.get('r'));
+      } else {
+        res = MSS.reportStore.load(q.get('id'), q.get('token'));
+      }
       var wrap = document.getElementById('wrap');
 
       if (!res.ok) {
         wrap.innerHTML =
           '<div class="rp-error"><h1>无法查看该诊断报告</h1><p>' + res.msg +
-          '<br>报告链接由商户端发起时生成，含完整诊断载荷（GitHub Pages 公网可访问），2 小时后失效。</p></div>';
+          '<br>短链格式：report.html?t=诊断流水号（有效期 2 小时）。</p></div>';
         return;
       }
 
@@ -293,8 +298,8 @@
           unfinishedSec +
           actionSec +
         '</div>' +
-        '<div class="rp-note">演示说明：报告链接固定为 GitHub Pages 公网地址，诊断数据编码在 URL hash（#d=）中，他人打开即可查看，无需同源存储；' +
-          '经 hjUserData 扩展信息字段同步给客服，链接有效期 2 小时。</div>' +
+        '<div class="rp-note">演示说明：报告短链仅含诊断流水号，例如 report.html?t=diag_xxxxxxxx；' +
+          '数据优先本机索引，并尝试远程备份供他人打开；经 hjUserData 扩展信息同步给客服，有效期 2 小时。</div>' +
         '<div class="rp-foot">商户自助服务助手（一期）· 演示环境<br>报告内容按脱敏规则展示，不含完整卡号与证件信息</div>';
     })();
   </script>

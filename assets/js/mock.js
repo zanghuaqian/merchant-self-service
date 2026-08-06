@@ -482,26 +482,65 @@ window.MSS = (function () {
     return { merchant: merchant, result: result, nodes: nodes, userAction: userAction || '', text: lines.join('\n') };
   }
 
-  /* -------- 诊断报告独立链接（GitHub Pages 公网可访问） -------- */
+  /* -------- 诊断报告短链（GitHub Pages · 流水号） -------- */
 
   /** 演示环境统一使用 GitHub Pages，保证客服/他人打开的是公网链接 */
   var PUBLIC_BASE = 'https://zanghuaqian.github.io/merchant-self-service/';
   var REPORT_KEY = 'mss_reports';
+  var REPORT_BY_T_KEY = 'mss_reports_by_t';
   var REPORT_TTL = 2 * 60 * 60 * 1000;
 
-  function encodeShare(str) {
-    try {
-      return btoa(unescape(encodeURIComponent(str)))
-        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-    } catch (e) {
-      return '';
+  function extractTraceId(payload, fallbackId) {
+    if (!payload) return fallbackId || '';
+    if (payload.diagnosis && payload.diagnosis.traceId) return payload.diagnosis.traceId;
+    if (payload.multi && payload.multi.reports && payload.multi.reports[0] &&
+        payload.multi.reports[0].diagnosis && payload.multi.reports[0].diagnosis.traceId) {
+      return payload.multi.reports[0].diagnosis.traceId;
     }
+    return fallbackId || ('diag_' + Math.random().toString(36).slice(2, 10));
   }
 
-  function decodeShare(s) {
-    s = String(s || '').replace(/-/g, '+').replace(/_/g, '/');
-    while (s.length % 4) s += '=';
-    return decodeURIComponent(escape(atob(s)));
+  function readByTraceMap() {
+    try { return JSON.parse(window.localStorage.getItem(REPORT_BY_T_KEY) || '{}'); } catch (e) { return {}; }
+  }
+
+  function writeByTraceMap(map) {
+    try { window.localStorage.setItem(REPORT_BY_T_KEY, JSON.stringify(map)); } catch (e) { /* ignore */ }
+  }
+
+  /** 同步上传到 jsonblob，便于他人用短链跨设备打开；失败则仅本机可读 */
+  function uploadRemoteSync(rec) {
+    try {
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', 'https://jsonblob.com/api/jsonBlob', false);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.setRequestHeader('Accept', 'application/json');
+      xhr.send(JSON.stringify(rec));
+      if (xhr.status >= 200 && xhr.status < 300) {
+        var loc = xhr.getResponseHeader('Location') || '';
+        var m = loc.match(/jsonBlob\/([^/?#]+)/i);
+        if (m) return m[1];
+        try {
+          var body = JSON.parse(xhr.responseText || '{}');
+          return body.id || body._id || '';
+        } catch (e2) { /* ignore */ }
+      }
+    } catch (e) { /* ignore CORS/network */ }
+    return '';
+  }
+
+  function fetchRemoteSync(remoteId) {
+    if (!remoteId) return null;
+    try {
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', 'https://jsonblob.com/api/jsonBlob/' + encodeURIComponent(remoteId), false);
+      xhr.setRequestHeader('Accept', 'application/json');
+      xhr.send(null);
+      if (xhr.status >= 200 && xhr.status < 300) {
+        return JSON.parse(xhr.responseText);
+      }
+    } catch (e) { /* ignore */ }
+    return null;
   }
 
   var reportStore = {
@@ -510,43 +549,87 @@ window.MSS = (function () {
     },
 
     /**
-     * 落库诊断报告并返回可分享链接。
-     * 演示：本地 localStorage 备份 + URL hash 内嵌完整载荷，
-     * 使 GitHub Pages 公网链接可被他人直接打开（无需同源存储）。
+     * 落库诊断报告。
+     * 短链仅含诊断流水号：report.html?t=diag_xxxx
+     * 同时尝试上传远程备份，短链附加 &r= 供他人跨设备打开。
      */
     save: function (payload) {
       var id = 'rpt_' + Math.random().toString(36).slice(2, 10);
       var token = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
       var now = Date.now();
+      var traceId = extractTraceId(payload, id);
       var rec = {
         id: id,
         token: token,
+        traceId: traceId,
         createdAt: formatTime(new Date(now)),
         expireAt: now + REPORT_TTL,
         expireText: formatTime(new Date(now + REPORT_TTL)),
         data: payload
       };
+      var remoteId = uploadRemoteSync(rec);
+      if (remoteId) rec.remoteId = remoteId;
+
       var db = this.all();
       db[id] = rec;
       try { window.localStorage.setItem(REPORT_KEY, JSON.stringify(db)); } catch (e) { /* ignore */ }
+
+      var byT = readByTraceMap();
+      byT[traceId] = { id: id, remoteId: remoteId || '', expireAt: rec.expireAt };
+      writeByTraceMap(byT);
+
       return rec;
     },
 
     load: function (id, token) {
       var rec = this.all()[id];
       if (!rec) return { ok: false, msg: '报告不存在或已被清理' };
-      if (rec.token !== token) return { ok: false, msg: '访问令牌无效，请让商户重新发起' };
+      if (token && rec.token !== token) return { ok: false, msg: '访问令牌无效，请让商户重新发起' };
       if (Date.now() > rec.expireAt) return { ok: false, msg: '报告链接已过期（有效期 2 小时）' };
       return { ok: true, record: rec };
     },
 
-    /** 从 URL hash 解析跨设备可分享的报告载荷（#d=…） */
+    /** 按诊断流水号加载（本地索引 → 远程备份） */
+    loadByTrace: function (traceId, remoteId) {
+      if (!traceId && !remoteId) {
+        return { ok: false, msg: '缺少诊断流水号' };
+      }
+      var byT = readByTraceMap();
+      var meta = (traceId && byT[traceId]) || null;
+      var db = this.all();
+      var rec = null;
+
+      if (meta && meta.id && db[meta.id]) rec = db[meta.id];
+      if (!rec && traceId) {
+        Object.keys(db).forEach(function (k) {
+          if (!rec && db[k] && db[k].traceId === traceId) rec = db[k];
+        });
+      }
+      if (!rec) {
+        var rid = remoteId || (meta && meta.remoteId) || '';
+        rec = fetchRemoteSync(rid);
+      }
+      if (!rec || !rec.data) {
+        return {
+          ok: false,
+          msg: '未找到流水号对应的诊断报告（可能已过期，或不在本机且远程备份不可用）'
+        };
+      }
+      if (rec.expireAt && Date.now() > rec.expireAt) {
+        return { ok: false, msg: '报告链接已过期（有效期 2 小时）' };
+      }
+      return { ok: true, record: rec };
+    },
+
+    /** @deprecated 兼容旧版 #d= 超长链接 */
     loadShared: function (hash) {
       var raw = String(hash || '');
       var m = raw.match(/(?:^[#&?]|[#&])d=([^&]+)/);
       if (!m) return null;
       try {
-        var rec = JSON.parse(decodeShare(decodeURIComponent(m[1])));
+        var s = String(m[1] || '').replace(/-/g, '+').replace(/_/g, '/');
+        while (s.length % 4) s += '=';
+        var rec = JSON.parse(decodeURIComponent(escape(atob(s))));
         if (!rec || !rec.data) return { ok: false, msg: '报告载荷无效' };
         if (rec.expireAt && Date.now() > rec.expireAt) {
           return { ok: false, msg: '报告链接已过期（有效期 2 小时）' };
@@ -557,11 +640,12 @@ window.MSS = (function () {
       }
     },
 
+    /** 短链：仅流水号；有远程备份时附加 &r= */
     url: function (rec) {
-      var packed = encodeShare(JSON.stringify(rec));
-      return PUBLIC_BASE + 'report.html?id=' + encodeURIComponent(rec.id) +
-        '&token=' + encodeURIComponent(rec.token) +
-        (packed ? '#d=' + packed : '');
+      var t = (rec && rec.traceId) || extractTraceId(rec && rec.data, rec && rec.id);
+      var u = PUBLIC_BASE + 'report.html?t=' + encodeURIComponent(t);
+      if (rec && rec.remoteId) u += '&r=' + encodeURIComponent(rec.remoteId);
+      return u;
     }
   };
 
