@@ -550,8 +550,8 @@ window.MSS = (function () {
 
     /**
      * 落库诊断报告。
-     * 短链仅含诊断流水号：report.html?t=diag_xxxx
-     * 同时尝试上传远程备份，短链附加 &r= 供他人跨设备打开。
+     * 对外短链仅含诊断流水号：report.html?t=diag_xxxx
+     * 远程备份只写本机索引，不拼进对外链接，避免扩展信息变长。
      */
     save: function (payload) {
       var id = 'rpt_' + Math.random().toString(36).slice(2, 10);
@@ -640,12 +640,10 @@ window.MSS = (function () {
       }
     },
 
-    /** 短链：仅流水号；有远程备份时附加 &r= */
+    /** 对外短链：仅流水号（写入 hjUserData 扩展信息） */
     url: function (rec) {
       var t = (rec && rec.traceId) || extractTraceId(rec && rec.data, rec && rec.id);
-      var u = PUBLIC_BASE + 'report.html?t=' + encodeURIComponent(t);
-      if (rec && rec.remoteId) u += '&r=' + encodeURIComponent(rec.remoteId);
-      return u;
+      return PUBLIC_BASE + 'report.html?t=' + encodeURIComponent(t);
     }
   };
 

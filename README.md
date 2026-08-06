@@ -90,7 +90,7 @@ App 与公众号复用 `assistant.js` + `mock.js`，对应 PRD 3.2「诊断流�
 
 `https://zanghuaqian.github.io/merchant-self-service/report.html?t=diag_xxxxxxxx`
 
-（若远程备份成功会附加 `&r=`，便于他人跨设备打开；有效期 2 小时。）
+写入 `hjUserData` 扩展信息；有效期 2 小时。
 
 - 报告 ID 与令牌均为随机值，**不可枚举**；有效期 2 小时，过期或令牌不符直接拒绝访问
 - 报告内容按脱敏规则展示（账户名、卡号、证件号均打码），不含完整卡号与证件信息
