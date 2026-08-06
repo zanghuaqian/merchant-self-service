@@ -119,56 +119,109 @@ window.MSS = (function () {
     var out = {};
     Object.keys(s).forEach(function (k) { out[k] = s[k]; });
 
-    if (scenarioId === 'settlement' || scenarioId === 'multi') {
+    var settleOff = {
+      settlement: 1, multi: 1, low_settle_card: 1, low_settle_refund: 1, low_all: 1
+    };
+    var cardBad = {
+      card: 1, payout_card: 1, low_settle_card: 1, low_card_split: 1, low_all: 1
+    };
+    var riskFreeze = { risk: 1, risk_freeze: 1, high_risk_contract: 1, high_all: 1, block_demo: 1 };
+    var riskOrder = { risk_order: 1, high_order_qual: 1 };
+    var contractBad = {
+      contract: 1, risk_contract: 1, high_risk_contract: 1, high_contract_qual: 1, high_all: 1
+    };
+    var qualBad = { qualification: 1, beneficiary: 1, high_order_qual: 1, high_contract_qual: 1, high_all: 1 };
+
+    if (settleOff[scenarioId]) {
       out.autoWithdraw = false;
       out.autoWithdrawTime = '未开启，需手动发起提现';
       out.ruleAlert = '未开启自动提现，结算资金需手动提现后才会出款';
     }
-    if (scenarioId === 'card') {
+    if (cardBad[scenarioId]) {
       out.cardStatus = '异常';
       out.cardAlert = '收款账户名称与开户信息不一致，请更新结算卡后重新出款';
     }
     if (scenarioId === 'payout_fail') {
       out.payoutAlert = '最近出款批次失败，失败原因来自渠道/银行侧，需联系客服协助核实';
     }
-    if (scenarioId === 'risk') {
+    if (riskFreeze[scenarioId]) {
       out.payoutAlert = '账户风控止出中，出款已暂停';
     }
-    if (scenarioId === 'risk_order') {
+    if (riskOrder[scenarioId]) {
       out.payoutAlert = '存在未处理风控调单，相关交易资金暂缓出款，请尽快补充材料';
     }
-    if (scenarioId === 'risk_contract') {
+    if (contractBad[scenarioId]) {
       out.payoutAlert = '电子合同未签约，相关结算出款已暂停，请完成合同签署';
+    }
+    if (qualBad[scenarioId] && !out.payoutAlert) {
+      out.payoutAlert = '资质/受益人信息不完整，相关结算出款已限制，请尽快补齐';
     }
     return out;
   }
 
-  /* ---------------------------- 诊断项定义（4.2） ---------------------------- */
+  /* ---------------------------- 诊断项定义（按客服提效项目优先级） ---------------------------- */
 
+  /**
+   * tier=high：P0+P1，同时诊断；任一异常则阻断后续
+   * tier=low：P2+P3，仅当 P0/P1 全部正常时才诊断
+   */
   var STEPS = [
-    { key: 'risk', name: '风控状态', source: '风控系统 · 账户止出/冻结/调单/合同签约状态' },
-    { key: 'qualification', name: '资质状态', source: '资质管理系统 · 证书到期日/缺失项' },
-    { key: 'settlement', name: '结算配置', source: '结算系统 · 自动提现开关/结算周期' },
-    { key: 'payout', name: '最新出款批次', source: '出款系统 · 最近 3 笔结算批次状态' },
-    { key: 'split', name: '分账/退款', source: '分账核心 · 交易核心' }
+    { key: 'risk', name: '风控状态', priority: 'P0', tier: 'high', source: '风控系统 · 账户止出/冻结/调单' },
+    { key: 'contract', name: '合同状态', priority: 'P1', tier: 'high', source: '签约系统 · 电子合同签署状态' },
+    { key: 'qualification', name: '资质状态', priority: 'P1', tier: 'high', source: '资质管理系统 · 证书到期/受益人' },
+    { key: 'settlement', name: '结算配置', priority: 'P2', tier: 'low', source: '结算系统 · 自动提现/结算周期' },
+    { key: 'payout', name: '最新出款批次', priority: 'P2', tier: 'low', source: '出款系统 · 最近结算批次状态' },
+    { key: 'split', name: '分账', priority: 'P3', tier: 'low', source: '分账核心 · 分账失败明细' },
+    { key: 'refund', name: '退款', priority: 'P3', tier: 'low', source: '交易核心 · 退款单状态' }
   ];
 
   var OK = {
-    risk: '正常，无止出/冻结/待处理调单/合同待签',
-    qualification: '正常，营业执照有效期至 2029-08-12',
+    risk: '正常，无止出/冻结/待处理调单',
+    contract: '正常，电子合同已签约',
+    qualification: '正常，营业执照有效且受益人信息完整',
     settlement: '正常，自动提现已开启（T+1）',
-    payout: '正常，最近 3 笔批次均出款成功',
-    split: '正常，无分账/退款挂起明细'
+    payout: '正常，最近批次均出款成功',
+    split: '正常，无分账失败挂起明细',
+    refund: '正常，无异常退款单'
   };
 
   /* -------------------- 解决方案配置（4.3 后台映射表） -------------------- */
 
   var SOLUTIONS = {
+    risk: { type: 'agent', label: '联系客服', note: '风控止出需人工核实材料后解除，预计 1 个工作日内反馈。' },
+    risk_order: {
+      type: 'link',
+      label: '去处理调单',
+      page: 'risk_order',
+      title: '调单详情',
+      url: 'https://risk.shengpay.com/order/detail'
+    },
+    risk_contract: {
+      type: 'link',
+      label: '去签约合同',
+      page: 'contract',
+      title: '合同签约',
+      url: 'https://sass.shengpay.com/esign/ca/8SqKW499T0XMv2740994'
+    },
+    contract: {
+      type: 'link',
+      label: '去签约合同',
+      page: 'contract',
+      title: '合同签约',
+      url: 'https://sass.shengpay.com/esign/ca/8SqKW499T0XMv2740994'
+    },
     qualification: {
       type: 'link',
       label: '立即更新资质',
       page: 'qualification',
       title: '资质信息更新',
+      url: 'https://sass.shengpay.com/com-pages-web/profits/v1/profits?ticket=BC_766967498100416512'
+    },
+    beneficiary: {
+      type: 'link',
+      label: '补充受益人',
+      page: 'qualification',
+      title: '受益人信息补充',
       url: 'https://sass.shengpay.com/com-pages-web/profits/v1/profits?ticket=BC_766967498100416512'
     },
     settlement: {
@@ -184,7 +237,6 @@ window.MSS = (function () {
         '保存后次日生效；关闭自动结算时可在结算设置页发起自助结算。'
       ]
     },
-    /** 结算卡异常：可自助，跳转结算卡信息变更申请页 */
     payout_card: {
       type: 'card_change',
       label: '修改结算卡',
@@ -192,13 +244,6 @@ window.MSS = (function () {
       title: '结算卡信息变更申请',
       url: 'https://settlecard.shengpay.com/settle-card/apply?ticket=56941366eaf2444b87e3b95ff4d796e6'
     },
-    /** 批次出款失败（渠道/银行原因）：不可自助，提示失败原因并转人工 */
-    payout: {
-      type: 'agent',
-      label: '联系客服',
-      note: '批次失败可能由银行系统维护、渠道风控等原因导致，需人工核实后重推出款。'
-    },
-    /** 兼容旧 solutionKey */
     card: {
       type: 'card_change',
       label: '修改结算卡',
@@ -206,197 +251,82 @@ window.MSS = (function () {
       title: '结算卡信息变更申请',
       url: 'https://settlecard.shengpay.com/settle-card/apply?ticket=56941366eaf2444b87e3b95ff4d796e6'
     },
-    /** 风控冻结：不可自助，转人工 */
-    risk: { type: 'agent', label: '联系客服', note: '风控止出需人工核实材料后解除，预计 1 个工作日内反馈。' },
-    /** 风控调单：系统存在未处理调单记录时允许自助，跳转调单详情 */
-    risk_order: {
-      type: 'link',
-      label: '去处理调单',
-      page: 'risk_order',
-      title: '调单详情',
-      url: 'https://risk.shengpay.com/order/detail'
+    payout: {
+      type: 'agent',
+      label: '联系客服',
+      note: '批次失败可能由银行系统维护、渠道风控等原因导致，需人工核实后重推出款。'
     },
-    /** 风控合同未签约：可自助，跳转电子合同签约页 */
-    risk_contract: {
-      type: 'link',
-      label: '去签约合同',
-      page: 'contract',
-      title: '合同签约',
-      url: 'https://sass.shengpay.com/esign/ca/8SqKW499T0XMv2740994'
+    split: { type: 'agent', label: '联系客服', note: '分账渠道异常需运营介入处理，请联系客服提供分账批次号。' },
+    refund_pending: {
+      type: 'guide',
+      label: '查看退款进度',
+      page: 'guide',
+      title: '退款进度说明',
+      question: '退款什么时候到账？',
+      guide: [
+        '退款由原支付渠道退回，一般 1-3 个工作日，银行卡最长 7 个工作日。',
+        '可在交易查询中查看退款状态与预计到账时间。',
+        '若超过预计时间仍未到账，可联系客服协助核查。'
+      ]
     },
-    split: { type: 'agent', label: '联系客服', note: '分账渠道异常需运营介入处理，请联系客服提供分账批次号。' }
+    refund_fail: { type: 'agent', label: '联系客服', note: '退款失败需人工核查退款链路，请携带退款单号转人工。' }
   };
 
-  /* ---------------------------- 演示场景（含异常样例） ---------------------------- */
+  /* ---------------------------- 演示场景（按 P0/P1 阻断逻辑细分） ---------------------------- */
 
   var SCENARIOS = [
-    {
-      id: 'qualification',
-      name: '资质过期（可自助）',
-      desc: '命中资质异常，跳转资质更新页后回填反馈',
-      findings: {
-        qualification: {
-          summary: '商户资质证书已过期，影响结算出款',
-          detail: '营业执照（证件号 9133****2178Q）已于 2026-07-15 到期，受益人信息未完善。资质失效期间结算出款会被自动挂起，补齐后次日恢复。',
-          brief: '过期（营业执照 2026-07-15 到期）',
-          selfService: true
-        }
-      }
-    },
-    {
-      id: 'settlement',
-      name: '未开自动提现（可自助）',
-      desc: '结算配置为手动提现，返回知识库指引',
-      findings: {
-        settlement: {
-          summary: '当前设置为手动提现，需前往操作提现',
-          detail: '自动提现开关处于关闭状态，当前可提现余额 3,860.42 元。开启后资金将在结算日按当前结算周期自动出款。',
-          brief: '手动提现（自动提现开关关闭）',
-          selfService: true
-        }
-      }
-    },
-    {
-      id: 'card',
-      name: '卡异常（可自助）',
-      desc: '结算卡信息异常，跳转结算卡变更页',
-      findings: {
-        payout: {
-          summary: '结算卡信息异常，导致出款失败',
-          detail: '出款系统校验结算卡失败：收款账户名称与开户信息不一致（错误码 CARD_INFO_INVALID），关联批次 PO20260730821，金额 5,280.00 元。请更新结算卡信息，提交后系统将于次日自动重新出款。',
-          brief: '结算卡异常（账户名称不一致）',
-          selfService: true,
-          solutionKey: 'payout_card'
-        }
-      }
-    },
-    {
-      id: 'payout_fail',
-      name: '批次出款失败（不可自助）',
-      desc: '渠道/银行侧失败，仅提示原因并转人工',
-      findings: {
-        payout: {
-          summary: 'PO20260730866 批次出款失败，需人工协助核实',
-          detail: '批次金额 8,650.00 元。渠道返回「收款银行系统维护中，暂无法入账」（错误码 BANK_MAINTAIN）。此类失败通常由银行系统维护、渠道风控拦截等原因引起，商户侧无法自助处理。请联系客服协助核实并重推出款。',
-          brief: '批次失败（银行系统维护 BANK_MAINTAIN）',
-          selfService: false,
-          solutionKey: 'payout',
-          batchNo: 'PO20260730866',
-          failCode: 'BANK_MAINTAIN',
-          failReason: '收款银行系统维护中，暂无法入账'
-        }
-      }
-    },
-    {
-      id: 'risk',
-      name: '风控冻结（不可自助）',
-      desc: '账户止出冻结，直接引导转人工',
-      findings: {
-        risk: {
-          summary: '账户存在风控止出，冻结金额 12,860.00 元',
-          detail: '命中规则：单日交易金额突增 + 异地 IP 集中（风控工单 RC20260730017），冻结时间 2026-07-30 18:22。需人工核实经营材料后解除。',
-          brief: '止出冻结（工单 RC20260730017，冻结 12,860.00 元）',
-          selfService: false
-        }
-      }
-    },
-    {
-      id: 'risk_contract',
-      name: '合同未签约（可自助）',
-      desc: '风控命中合同未签约，跳转电子合同签约页',
-      findings: {
-        risk: {
-          summary: '电子合同未签约，结算出款已暂停',
-          detail: '风控系统检出商户电子合同尚未完成签署（合同编号 CT20260731026）。未签约状态下相关结算资金暂缓出款。请前往合同签约页完成签署，签署成功后系统将自动恢复出款。',
-          brief: '合同未签约（CT20260731026）',
-          selfService: true,
-          solutionKey: 'risk_contract',
-          contractNo: 'CT20260731026'
-        }
-      }
-    },
-    {
-      id: 'risk_order',
-      name: '风控调单（可自助）',
-      desc: '存在未处理调单记录，引导跳转调单详情处理',
-      findings: {
-        risk: {
-          summary: '存在未处理的风控调单，需补充交易凭证',
-          detail: '风控系统检出 1 笔待处理调单（事件编号 RG2026071200004），涉及 3 笔交易，需按审核员要求补充经营与交易真实性材料。提交后预计 1 个工作日内完成审核，通过后相关资金恢复出款。',
-          brief: '待处理调单 RG2026071200004（待回复·已逾期）',
-          selfService: true,
-          solutionKey: 'risk_order',
-          eventNo: 'RG2026071200004',
-          status: '待回复',
-          createdAt: '2026/07/12',
-          deadline: '2026/07/17',
-          overdue: true,
-          auditor: '调单审核员',
-          feedbackAt: '2026-07-12 12:10:05',
-          requirements: [
-            '说明实际经营地址与经营内容',
-            '提供经营场所照片4张（包含门头名称、地址等）',
-            '说明/提供交易真实性材料'
-          ],
-          orders: [
-            { channel: 'ali', tradeNo: 'MR3320260710128236056', mchNo: '4500877312', time: '2026/07/10 15:23:05', amount: '1.00', status: '退款成功' },
-            { channel: 'ali', tradeNo: 'MR3320260710128236055', mchNo: '4500877312', time: '2026/07/10 15:22:41', amount: '1.00', status: '退款成功' },
-            { channel: 'ali', tradeNo: 'MR3320260710128236054', mchNo: '4500877312', time: '2026/07/10 15:21:18', amount: '1.00', status: '退款成功' }
-          ]
-        }
-      }
-    },
-    {
-      id: 'split',
-      name: '分账失败（不可自助）',
-      desc: '分账明细失败导致金额未释放',
-      findings: {
-        split: {
-          summary: '存在分账失败明细，导致部分金额未释放',
-          detail: '3 笔分账指令失败（分账接收方未完成签约），未释放金额 1,240.00 元，涉及订单 20260730-0087 等。需运营协助重推分账。',
-          brief: '3 笔分账失败，未释放 1,240.00 元',
-          selfService: false
-        }
-      }
-    },
-    {
-      id: 'multi',
-      name: '多个异常并存',
-      desc: '按阻断优先级展示，其余可折叠查看',
-      findings: {
-        qualification: {
-          summary: '商户资质证书已过期，影响结算出款',
-          detail: '营业执照（证件号 9133****2178Q）已于 2026-07-15 到期，受益人信息未完善。',
-          brief: '过期（营业执照 2026-07-15 到期）',
-          selfService: true
-        },
-        settlement: {
-          summary: '当前设置为手动提现，需前往操作提现',
-          detail: '自动提现开关处于关闭状态，结算资金需手动提现后才会出款。',
-          brief: '手动提现（自动提现开关关闭）',
-          selfService: true
-        },
-        split: {
-          summary: '存在分账失败明细，导致部分金额未释放',
-          detail: '1 笔分账指令失败，未释放金额 320.00 元。',
-          brief: '1 笔分账失败，未释放 320.00 元',
-          selfService: false
-        }
-      }
-    },
-    {
-      id: 'normal',
-      name: '未发现异常',
-      desc: '5 项排查全部正常，提示银行处理中',
-      findings: {}
-    },
-    {
-      id: 'timeout',
-      name: '诊断超时（>5 秒）',
-      desc: '触发「网络繁忙，是否转人工？」',
-      findings: {},
-      timeout: true
-    }
+    { id: 'risk_freeze', name: 'P0·风控止出（不可自助）', desc: '账户止出冻结，阻断后续诊断，引导转人工',
+      findings: { risk: { summary: '您的账户存在风控止出，冻结金额 12,860.00 元，暂无法结算。', detail: '命中规则：单日交易金额突增 + 异地 IP 集中（风控工单 RC20260730017），冻结时间 2026-07-30 18:22。需人工核实经营材料后解除。', brief: '止出冻结（工单 RC20260730017，冻结 12,860.00 元）', selfService: false, solutionKey: 'risk' } } },
+    { id: 'risk_order', name: 'P0·风控调单（可自助）', desc: '调单未完成导致止出，可跳转调单页；阻断后续',
+      findings: { risk: { summary: '您的账户因风控调单未完成导致止出，请完成调单后恢复结算。', detail: '风控系统检出 1 笔待处理调单（事件编号 RG2026071200004），涉及 3 笔交易。提交后预计 1 个工作日内完成审核。', brief: '待处理调单 RG2026071200004（待回复·已逾期）', selfService: true, solutionKey: 'risk_order', eventNo: 'RG2026071200004', status: '待回复', createdAt: '2026/07/12', deadline: '2026/07/17', overdue: true, auditor: '调单审核员', feedbackAt: '2026-07-12 12:10:05', requirements: ['说明实际经营地址与经营内容', '提供经营场所照片4张（包含门头名称、地址等）', '说明/提供交易真实性材料'], orders: [{ channel: 'ali', tradeNo: 'MR3320260710128236056', mchNo: '4500877312', time: '2026/07/10 15:23:05', amount: '1.00', status: '退款成功' }, { channel: 'ali', tradeNo: 'MR3320260710128236055', mchNo: '4500877312', time: '2026/07/10 15:22:41', amount: '1.00', status: '退款成功' }, { channel: 'ali', tradeNo: 'MR3320260710128236054', mchNo: '4500877312', time: '2026/07/10 15:21:18', amount: '1.00', status: '退款成功' }] } } },
+    { id: 'contract', name: 'P1·合同未签约（可自助）', desc: '电子合同未签导致止出，跳转签约页；阻断后续',
+      findings: { contract: { summary: '您的商户合同尚未完成签约，导致账户止出，请完成合同签约后恢复结算。', detail: '签约系统检出商户电子合同尚未完成签署（合同编号 CT20260731026）。未签约状态下相关结算资金暂缓出款。', brief: '合同未签约（CT20260731026）', selfService: true, solutionKey: 'contract', contractNo: 'CT20260731026' } } },
+    { id: 'qualification', name: 'P1·资质过期（可自助）', desc: '营业执照过期限制出款，跳转资质更新；阻断后续',
+      findings: { qualification: { summary: '您的商户资质证书（营业执照）已于 2026年7月15日 过期，导致结算出款被限制。', detail: '营业执照（证件号 9133****2178Q）已于 2026-07-15 到期。资质失效期间结算出款会被自动挂起，补齐后系统将重新校验。', brief: '过期（营业执照 2026-07-15 到期）', selfService: true, solutionKey: 'qualification' } } },
+    { id: 'beneficiary', name: 'P1·受益人未补充（可自助）', desc: '受益人信息不完整，跳转补充页；阻断后续',
+      findings: { qualification: { summary: '您的受益人信息不完整，请补充后重试。', detail: '资质系统检出受益人姓名/证件号缺失或不完整，需补充后方可恢复正常结算出款。', brief: '受益人信息未完善', selfService: true, solutionKey: 'beneficiary' } } },
+
+    { id: 'high_risk_contract', name: 'P0+P1·止出+合同未签', desc: '风控止出与合同未签同时命中，后续 P2/P3 不执行',
+      findings: { risk: { summary: '您的账户存在风控止出，冻结金额 8,200.00 元，暂无法结算。', detail: '风控工单 RC20260731001，冻结金额 8,200.00 元。', brief: '止出冻结（RC20260731001）', selfService: false, solutionKey: 'risk' }, contract: { summary: '您的商户合同尚未完成签约，导致账户止出，请完成合同签约后恢复结算。', detail: '合同编号 CT20260731026 未签署。', brief: '合同未签约（CT20260731026）', selfService: true, solutionKey: 'contract' } } },
+    { id: 'high_order_qual', name: 'P0+P1·调单+资质过期', desc: '调单与资质过期同时命中，均可自助，阻断后续',
+      findings: { risk: { summary: '您的账户因风控调单未完成导致止出，请完成调单后恢复结算。', detail: '待处理调单 RG2026071200004。', brief: '待处理调单 RG2026071200004', selfService: true, solutionKey: 'risk_order', eventNo: 'RG2026071200004', status: '待回复', createdAt: '2026/07/12', deadline: '2026/07/17', overdue: true, auditor: '调单审核员', feedbackAt: '2026-07-12 12:10:05', requirements: ['说明实际经营地址与经营内容', '提供经营场所照片4张', '说明/提供交易真实性材料'], orders: [{ channel: 'ali', tradeNo: 'MR3320260710128236056', mchNo: '4500877312', time: '2026/07/10 15:23:05', amount: '1.00', status: '退款成功' }] }, qualification: { summary: '您的商户资质证书（营业执照）已于 2026年7月15日 过期，导致结算出款被限制。', detail: '营业执照已过期，需更新后重新校验。', brief: '过期（营业执照 2026-07-15 到期）', selfService: true, solutionKey: 'qualification' } } },
+    { id: 'high_contract_qual', name: 'P1+P1·合同+受益人', desc: '合同未签与受益人缺失同时命中，阻断后续',
+      findings: { contract: { summary: '您的商户合同尚未完成签约，导致账户止出，请完成合同签约后恢复结算。', detail: '合同编号 CT20260731026 未签署。', brief: '合同未签约（CT20260731026）', selfService: true, solutionKey: 'contract' }, qualification: { summary: '您的受益人信息不完整，请补充后重试。', detail: '受益人姓名/证件号缺失。', brief: '受益人信息未完善', selfService: true, solutionKey: 'beneficiary' } } },
+    { id: 'high_all', name: 'P0+P1·三项全命中', desc: '风控止出 + 合同未签 + 资质过期，后续全部阻断',
+      findings: { risk: { summary: '您的账户存在风控止出，冻结金额 3,600.00 元，暂无法结算。', detail: '风控工单 RC20260801008。', brief: '止出冻结（RC20260801008）', selfService: false, solutionKey: 'risk' }, contract: { summary: '您的商户合同尚未完成签约，导致账户止出，请完成合同签约后恢复结算。', detail: '合同编号 CT20260801011 未签署。', brief: '合同未签约（CT20260801011）', selfService: true, solutionKey: 'contract' }, qualification: { summary: '您的商户资质证书（营业执照）已于 2026年6月30日 过期，导致结算出款被限制。', detail: '营业执照已过期。', brief: '过期（营业执照 2026-06-30 到期）', selfService: true, solutionKey: 'qualification' } } },
+
+    { id: 'settlement', name: 'P2·未开自动提现（可自助）', desc: 'P0/P1 正常后诊断结算配置，引导结算设置',
+      findings: { settlement: { summary: '当前结算方式为手动提现，需前往结算设置开启自动提现或手动操作提现。', detail: '自动提现开关处于关闭状态，当前可提现余额 3,860.42 元。开启后资金将在结算日按当前结算周期自动出款。', brief: '手动提现（自动提现开关关闭）', selfService: true, solutionKey: 'settlement' } } },
+    { id: 'payout_card', name: 'P2·出款失败·卡异常（可自助）', desc: '收款卡信息异常，跳转结算卡变更',
+      findings: { payout: { summary: '2026年7月30日 结算批次（批次号：PO20260730821）出款失败，原因：收款银行卡信息错误或已失效。', detail: '出款系统校验结算卡失败：收款账户名称与开户信息不一致（错误码 CARD_INFO_INVALID），金额 5,280.00 元。请更新结算卡，提交后系统将于次日自动重新出款。', brief: '结算卡异常（账户名称不一致）', selfService: true, solutionKey: 'payout_card' } } },
+    { id: 'payout_fail', name: 'P2·出款失败·银行通道（不可自助）', desc: '银行通道异常，引导转人工',
+      findings: { payout: { summary: '2026年7月30日 结算批次（批次号：PO20260730866）出款失败，原因：银行通道处理异常，请稍后重试。', detail: '批次金额 8,650.00 元。渠道返回「收款银行系统维护中，暂无法入账」（错误码 BANK_MAINTAIN）。', brief: '批次失败（银行系统维护 BANK_MAINTAIN）', selfService: false, solutionKey: 'payout', batchNo: 'PO20260730866', failCode: 'BANK_MAINTAIN', failReason: '收款银行系统维护中，暂无法入账' } } },
+    { id: 'split', name: 'P3·分账失败（不可自助）', desc: '分账失败导致资金未释放，转人工',
+      findings: { split: { summary: '存在 3 笔分账失败明细，导致部分结算资金未释放。失败原因：分账接收方未完成签约。', detail: '未释放金额 1,240.00 元，涉及订单 20260730-0087 等。需运营协助重推分账。', brief: '3 笔分账失败，未释放 1,240.00 元', selfService: false, solutionKey: 'split' } } },
+    { id: 'refund_pending', name: 'P3·退款处理中（安抚）', desc: '退款银行处理中，展示进度说明',
+      findings: { refund: { summary: '退款单号 RF20260731088 已受理，目前银行处理中，预计 2 小时内到账。', detail: '退款金额 128.00 元，原路退回至支付银行卡。可在交易查询中查看退款进度。', brief: '退款处理中（RF20260731088）', selfService: true, solutionKey: 'refund_pending' } } },
+    { id: 'refund_fail', name: 'P3·退款失败（不可自助）', desc: '退款处理失败，引导转人工',
+      findings: { refund: { summary: '退款单号 RF20260730055 处理失败，原因：原路退回账户异常，请联系客服处理。', detail: '退款金额 560.00 元，渠道返回 ACCOUNT_INVALID。需人工核查退款链路。', brief: '退款失败（RF20260730055）', selfService: false, solutionKey: 'refund_fail' } } },
+
+    { id: 'low_settle_card', name: 'P2+P2·手动提现+卡异常', desc: '高优先级正常，同时命中结算配置与卡异常',
+      findings: { settlement: { summary: '当前结算方式为手动提现，需前往结算设置开启自动提现或手动操作提现。', detail: '自动提现开关关闭。', brief: '手动提现（自动提现开关关闭）', selfService: true, solutionKey: 'settlement' }, payout: { summary: '2026年7月30日 结算批次（批次号：PO20260730821）出款失败，原因：收款银行卡信息错误或已失效。', detail: '账户名称不一致，金额 5,280.00 元。', brief: '结算卡异常（账户名称不一致）', selfService: true, solutionKey: 'payout_card' } } },
+    { id: 'low_card_split', name: 'P2+P3·卡异常+分账失败', desc: '高优先级正常，出款卡异常与分账失败并存',
+      findings: { payout: { summary: '2026年7月30日 结算批次（批次号：PO20260730821）出款失败，原因：收款银行卡信息错误或已失效。', detail: '卡信息异常。', brief: '结算卡异常', selfService: true, solutionKey: 'payout_card' }, split: { summary: '存在 1 笔分账失败明细，导致部分结算资金未释放。失败原因：接收方未签约。', detail: '未释放金额 320.00 元。', brief: '1 笔分账失败，未释放 320.00 元', selfService: false, solutionKey: 'split' } } },
+    { id: 'low_settle_refund', name: 'P2+P3·手动提现+退款失败', desc: '结算配置与退款失败并存',
+      findings: { settlement: { summary: '当前结算方式为手动提现，需前往结算设置开启自动提现或手动操作提现。', detail: '自动提现关闭。', brief: '手动提现', selfService: true, solutionKey: 'settlement' }, refund: { summary: '退款单号 RF20260730055 处理失败，原因：原路退回账户异常，请联系客服处理。', detail: '退款失败需人工核查。', brief: '退款失败', selfService: false, solutionKey: 'refund_fail' } } },
+    { id: 'low_all', name: 'P2+P3·低优先级全命中', desc: '结算/出款/分账/退款均异常（P0/P1 正常才可出现）',
+      findings: { settlement: { summary: '当前结算方式为手动提现，需前往结算设置开启自动提现或手动操作提现。', detail: '自动提现关闭。', brief: '手动提现', selfService: true, solutionKey: 'settlement' }, payout: { summary: '2026年7月30日 结算批次出款失败，原因：收款银行卡信息错误或已失效。', detail: '卡异常。', brief: '结算卡异常', selfService: true, solutionKey: 'payout_card' }, split: { summary: '存在 2 笔分账失败明细，导致部分结算资金未释放。', detail: '未释放 640.00 元。', brief: '2 笔分账失败', selfService: false, solutionKey: 'split' }, refund: { summary: '退款单号 RF20260731001 处理失败，请联系客服处理。', detail: '退款失败。', brief: '退款失败', selfService: false, solutionKey: 'refund_fail' } } },
+
+    { id: 'block_demo', name: '阻断演示·P0命中忽略后续项', desc: '场景含出款异常数据，但因风控止出，出款项标记未执行',
+      findings: { risk: { summary: '您的账户存在风控止出，冻结金额 1,000.00 元，暂无法结算。', detail: 'P0 命中后不继续诊断 P2/P3。', brief: '止出冻结', selfService: false, solutionKey: 'risk' }, payout: { summary: '（演示用）即便配置了出款异常，也应被阻断不执行', detail: '不应出现在结果异常列表中', brief: '应被跳过', selfService: true, solutionKey: 'payout_card' } } },
+
+    { id: 'normal', name: '兜底·未发现异常', desc: '全部诊断项正常，安抚文案 + 联系客服入口', findings: {} },
+    { id: 'timeout', name: '诊断超时（>5 秒）', desc: '触发「网络繁忙，是否转人工？」', findings: {}, timeout: true },
+
+    { id: 'risk', name: '（兼容）风控冻结', desc: '同 P0·风控止出', findings: { risk: { summary: '您的账户存在风控止出，冻结金额 12,860.00 元，暂无法结算。', detail: '风控工单 RC20260730017。', brief: '止出冻结', selfService: false, solutionKey: 'risk' } } },
+    { id: 'risk_contract', name: '（兼容）合同未签约', desc: '同 P1·合同未签约', findings: { contract: { summary: '您的商户合同尚未完成签约，导致账户止出，请完成合同签约后恢复结算。', detail: '合同编号 CT20260731026。', brief: '合同未签约', selfService: true, solutionKey: 'contract', contractNo: 'CT20260731026' } } },
+    { id: 'card', name: '（兼容）卡异常', desc: '同 P2·出款失败·卡异常', findings: { payout: { summary: '结算批次出款失败，原因：收款银行卡信息错误或已失效。', detail: '卡信息异常。', brief: '结算卡异常', selfService: true, solutionKey: 'payout_card' } } },
+    { id: 'multi', name: '（兼容）多异常·低优先级', desc: '同手动提现+卡异常+分账', findings: { settlement: { summary: '当前结算方式为手动提现，需前往结算设置开启自动提现或手动操作提现。', detail: '自动提现关闭。', brief: '手动提现', selfService: true, solutionKey: 'settlement' }, payout: { summary: '结算批次出款失败，原因：收款银行卡信息错误或已失效。', detail: '卡异常。', brief: '结算卡异常', selfService: true, solutionKey: 'payout_card' }, split: { summary: '存在 1 笔分账失败明细，导致部分结算资金未释放。', detail: '未释放 320.00 元。', brief: '1 笔分账失败', selfService: false, solutionKey: 'split' } } }
   ];
 
   function getScenario(id) {
@@ -422,9 +352,10 @@ window.MSS = (function () {
   }
 
   /**
-   * 按 PRD 4.2 顺序排查：命中首个阻断异常即终止后续查询；
-   * 并行查询已获取的其他异常在结果页折叠区展示。
-   * opts.resolvedKeys：商户已自助处理完成的节点，本次视为已恢复，继续排查后续项。
+   * 诊断逻辑：
+   * 1）P0+P1（tier=high）同时诊断，多项异常均可展示；
+   * 2）若 P0/P1 任一异常（未自助恢复），则阻断后续 P2/P3，标记未执行；
+   * 3）P0/P1 全部正常（或已自助恢复）后，再诊断全部 P2/P3。
    */
   function diagnose(scenarioId, currentMerchant, opts) {
     opts = opts || {};
@@ -432,7 +363,6 @@ window.MSS = (function () {
     var sc = getScenario(scenarioId);
     var steps = [], primary = null, others = [];
     var st = currentMerchant && currentMerchant.settlement;
-    /** 结算配置正常时的文案跟随当前商户的真实结算规则 */
     var okSettlement = st
       ? '正常，' + (st.autoWithdraw ? '自动提现已开启' : '手动提现') + '（' + st.cycle + '，日切 ' + st.cutoff + '）'
       : OK.settlement;
@@ -441,52 +371,77 @@ window.MSS = (function () {
       return resolvedKeys.indexOf(key) >= 0;
     }
 
-    STEPS.forEach(function (def) {
-      var hit = sc.findings[def.key];
-      var step = { key: def.key, name: def.name, source: def.source };
+    function attachHit(step, hit, def) {
+      step.status = 'abnormal';
+      step.summary = hit.summary;
+      step.detail = hit.detail;
+      step.brief = hit.brief;
+      step.selfService = !!hit.selfService;
+      step.solution = SOLUTIONS[hit.solutionKey || def.key];
+      step.meta = hit;
+      step.priority = def.priority;
+    }
 
+    function pushAbnormal(step) {
+      if (!primary) primary = step;
+      else others.push(step);
+    }
+
+    /* 先完整跑完 P0/P1，再决定是否阻断 P2/P3 */
+    var highBlocked = false;
+    var highSteps = STEPS.filter(function (d) { return d.tier === 'high'; });
+    var lowSteps = STEPS.filter(function (d) { return d.tier === 'low'; });
+
+    highSteps.forEach(function (def) {
+      var hit = sc.findings[def.key];
+      var step = { key: def.key, name: def.name, source: def.source, priority: def.priority, tier: def.tier };
       if (hit && isResolved(def.key)) {
         step.status = 'resolved';
         step.brief = '已自助处理，状态已恢复';
         step.selfService = !!hit.selfService;
-      } else if (primary) {
-        if (hit) {
-          step.status = 'abnormal';
-          step.summary = hit.summary;
-          step.detail = hit.detail;
-          step.brief = hit.brief;
-          step.selfService = !!hit.selfService;
-          step.solution = SOLUTIONS[hit.solutionKey || def.key];
-          step.meta = hit;
-          others.push(step);
-        } else {
-          step.status = 'skipped';
-          step.brief = '已终止查询（前序命中阻断异常）';
-        }
       } else if (hit) {
-        step.status = 'abnormal';
-        step.summary = hit.summary;
-        step.detail = hit.detail;
-        step.brief = hit.brief;
-        step.selfService = !!hit.selfService;
-        step.solution = SOLUTIONS[hit.solutionKey || def.key];
-        step.meta = hit;
-        primary = step;
+        attachHit(step, hit, def);
+        pushAbnormal(step);
+        highBlocked = true;
       } else {
         step.status = 'normal';
-        step.brief = def.key === 'settlement' ? okSettlement : OK[def.key];
+        step.brief = OK[def.key] || '正常';
       }
       steps.push(step);
     });
 
-    // 超时场景：出款批次之后的节点未取到结果，快照需如实标记
+    lowSteps.forEach(function (def) {
+      var hit = sc.findings[def.key];
+      var step = { key: def.key, name: def.name, source: def.source, priority: def.priority, tier: def.tier };
+      if (highBlocked) {
+        step.status = 'skipped';
+        step.brief = '已终止查询（P0/P1 命中阻断异常）';
+        steps.push(step);
+        return;
+      }
+      if (hit && isResolved(def.key)) {
+        step.status = 'resolved';
+        step.brief = '已自助处理，状态已恢复';
+        step.selfService = !!hit.selfService;
+      } else if (hit) {
+        attachHit(step, hit, def);
+        pushAbnormal(step);
+      } else {
+        step.status = 'normal';
+        step.brief = def.key === 'settlement' ? okSettlement : (OK[def.key] || '正常');
+      }
+      steps.push(step);
+    });
+
     if (sc.timeout) {
       steps.forEach(function (s) {
-        if (s.key === 'payout' || s.key === 'split') {
+        if (s.tier === 'low') {
           s.status = 'skipped';
           s.brief = '查询超时，未返回结果';
         }
       });
+      primary = null;
+      others = [];
     }
 
     return {
@@ -495,6 +450,7 @@ window.MSS = (function () {
       steps: steps,
       primary: primary,
       others: others,
+      highBlocked: highBlocked,
       traceId: traceId(),
       time: formatTime(new Date())
     };
@@ -526,10 +482,27 @@ window.MSS = (function () {
     return { merchant: merchant, result: result, nodes: nodes, userAction: userAction || '', text: lines.join('\n') };
   }
 
-  /* -------- 诊断报告独立链接（模拟服务端存储 + 一次性令牌，4.4） -------- */
+  /* -------- 诊断报告独立链接（GitHub Pages 公网可访问） -------- */
 
+  /** 演示环境统一使用 GitHub Pages，保证客服/他人打开的是公网链接 */
+  var PUBLIC_BASE = 'https://zanghuaqian.github.io/merchant-self-service/';
   var REPORT_KEY = 'mss_reports';
   var REPORT_TTL = 2 * 60 * 60 * 1000;
+
+  function encodeShare(str) {
+    try {
+      return btoa(unescape(encodeURIComponent(str)))
+        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function decodeShare(s) {
+    s = String(s || '').replace(/-/g, '+').replace(/_/g, '/');
+    while (s.length % 4) s += '=';
+    return decodeURIComponent(escape(atob(s)));
+  }
 
   var reportStore = {
     all: function () {
@@ -537,8 +510,9 @@ window.MSS = (function () {
     },
 
     /**
-     * 落库诊断报告并返回可分享给客服的链接。
-     * 真实实现应写入服务端并由服务端签发 token；此处用 localStorage 模拟同源存储。
+     * 落库诊断报告并返回可分享链接。
+     * 演示：本地 localStorage 备份 + URL hash 内嵌完整载荷，
+     * 使 GitHub Pages 公网链接可被他人直接打开（无需同源存储）。
      */
     save: function (payload) {
       var id = 'rpt_' + Math.random().toString(36).slice(2, 10);
@@ -566,9 +540,28 @@ window.MSS = (function () {
       return { ok: true, record: rec };
     },
 
+    /** 从 URL hash 解析跨设备可分享的报告载荷（#d=…） */
+    loadShared: function (hash) {
+      var raw = String(hash || '');
+      var m = raw.match(/(?:^[#&?]|[#&])d=([^&]+)/);
+      if (!m) return null;
+      try {
+        var rec = JSON.parse(decodeShare(decodeURIComponent(m[1])));
+        if (!rec || !rec.data) return { ok: false, msg: '报告载荷无效' };
+        if (rec.expireAt && Date.now() > rec.expireAt) {
+          return { ok: false, msg: '报告链接已过期（有效期 2 小时）' };
+        }
+        return { ok: true, record: rec };
+      } catch (e) {
+        return { ok: false, msg: '报告载荷解析失败，请让商户重新发起' };
+      }
+    },
+
     url: function (rec) {
-      var base = window.location.href.replace(/[^/]*$/, '');
-      return base + 'report.html?id=' + rec.id + '&token=' + rec.token;
+      var packed = encodeShare(JSON.stringify(rec));
+      return PUBLIC_BASE + 'report.html?id=' + encodeURIComponent(rec.id) +
+        '&token=' + encodeURIComponent(rec.token) +
+        (packed ? '#d=' + packed : '');
     }
   };
 
@@ -753,6 +746,7 @@ window.MSS = (function () {
   }
 
   return {
+    PUBLIC_BASE: PUBLIC_BASE,
     MERCHANTS: MERCHANTS,
     STEPS: STEPS,
     SCENARIOS: SCENARIOS,

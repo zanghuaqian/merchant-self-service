@@ -129,13 +129,16 @@
   <script>
     (function () {
       var q = new URLSearchParams(window.location.search);
-      var res = MSS.reportStore.load(q.get('id'), q.get('token'));
+      var shared = MSS.reportStore.loadShared(window.location.hash);
+      var res = (shared && shared.ok) ? shared
+        : (shared && shared.ok === false) ? shared
+        : MSS.reportStore.load(q.get('id'), q.get('token'));
       var wrap = document.getElementById('wrap');
 
       if (!res.ok) {
         wrap.innerHTML =
           '<div class="rp-error"><h1>无法查看该诊断报告</h1><p>' + res.msg +
-          '<br>报告链接由商户端发起时生成，带一次性令牌且 2 小时后失效。</p></div>';
+          '<br>报告链接由商户端发起时生成，含完整诊断载荷（GitHub Pages 公网可访问），2 小时后失效。</p></div>';
         return;
       }
 
@@ -171,7 +174,7 @@
           '<div class="mb">' +
             (dx.primary
               ? '<div class="rp-primary" style="margin:10px 0"><h3>结论：' + dx.primary.summary + '</h3><p>' + dx.primary.detail + '</p></div>'
-              : '<div class="rp-kv"><span class="v">该商户 5 项排查均正常</span></div>') +
+              : '<div class="rp-kv"><span class="v">该商户 ' + (window.MSS && MSS.STEPS ? MSS.STEPS.length : 7) + ' 项排查均正常</span></div>') +
             kv('诊断流水号', dx.traceId || '—', true) +
             kv('诊断时间', dx.time || '—') +
             (dx.abnormals && dx.abnormals.length
@@ -290,8 +293,8 @@
           unfinishedSec +
           actionSec +
         '</div>' +
-        '<div class="rp-note">演示说明：本页模拟「诊断报告独立链接」方案。多商户场景下多份诊断合并为一份完整报告；' +
-          '真实实现中报告数据存于服务端，链接携带一次性令牌与有效期，经 hjUserData 地址字段同步给客服。</div>' +
+        '<div class="rp-note">演示说明：报告链接固定为 GitHub Pages 公网地址，诊断数据编码在 URL hash（#d=）中，他人打开即可查看，无需同源存储；' +
+          '经 hjUserData 扩展信息字段同步给客服，链接有效期 2 小时。</div>' +
         '<div class="rp-foot">商户自助服务助手（一期）· 演示环境<br>报告内容按脱敏规则展示，不含完整卡号与证件信息</div>';
     })();
   </script>

@@ -327,7 +327,7 @@
               <span class="nav-title">智能诊断
                 <span class="tooltip-icon"><i class="bi bi-lightbulb-fill"></i></span>
                 <div class="product-tip">
-                  <div class="product-tip-content">诊断引擎并行查询风控、资质、结算配置、出款批次、分账 5 个系统，命中首个阻断异常即终止后续查询并返回结论，目标 10 秒内出结果。</div>
+                  <div class="product-tip-content">诊断引擎先同时查 P0/P1（风控、合同、资质）；命中阻断异常则终止后续；无异常再查 P2/P3（结算配置、出款批次、分账、退款），共 7 项，目标 10 秒内出结果。</div>
                 </div>
               </span>
             </div>
@@ -344,7 +344,7 @@
               <span class="nav-title">诊断报告
                 <span class="tooltip-icon"><i class="bi bi-lightbulb-fill"></i></span>
                 <div class="product-tip">
-                  <div class="product-tip-content">结果页分三种形态：命中异常且可自助（主按钮跳转修复页）、命中异常不可自助（引导转人工）、未发现异常（安抚文案+稍后查看）。</div>
+                  <div class="product-tip-content">结果页分三种形态：命中异常且可自助、命中异常不可自助、未发现异常。用户点击返回/稍后查看退出诊断报告时弹出「已解决/未解决」反馈，埋点记录商户号、流水号、报告链接与反馈结果。</div>
                 </div>
               </span>
             </div>
@@ -364,7 +364,7 @@
               <span class="nav-title">在线客服
                 <span class="tooltip-icon"><i class="bi bi-lightbulb-fill"></i></span>
                 <div class="product-tip">
-                  <div class="product-tip-content">转人工时自动携带诊断快照（商户号、产品线、诊断流水号、5 项排查结果、用户操作与反馈），客服工作台同屏展示，无需商户重复描述。</div>
+                  <div class="product-tip-content">转人工时自动携带诊断快照（商户号、产品线、诊断流水号、7 项排查结果、用户操作与反馈），客服工作台同屏展示，无需商户重复描述。</div>
                 </div>
               </span>
             </div>

@@ -121,6 +121,8 @@ window.Assistant = (function () {
     userAction: '',
     solution: null,
     feedback: '',
+    feedbackDone: false,
+    feedbackReportUrl: '',
     resolvedKeys: [],
     processLog: [],
     activeStepKey: '',
@@ -133,6 +135,8 @@ window.Assistant = (function () {
       userAction: '',
       solution: null,
       feedback: '',
+      feedbackDone: false,
+      feedbackReportUrl: '',
       resolvedKeys: keepResolved ? (state.resolvedKeys || []).slice() : [],
       processLog: keepResolved ? (state.processLog || []).slice() : [],
       activeStepKey: '',
@@ -232,7 +236,7 @@ window.Assistant = (function () {
     if (actionText) state.userAction = actionText;
   }
 
-  /** 自助提交成功后：刷新结果页并拉起反馈 */
+  /** 自助提交成功后：刷新结果页（反馈在退出诊断报告时再收集） */
   function afterSelfServiceSuccess(actionText, toastMsg) {
     markSelfServiceDone(actionText);
     MSS.track('自助操作完成', actionText || '');
@@ -240,7 +244,6 @@ window.Assistant = (function () {
     setTimeout(function () {
       if (state.result) showResult(state.result);
       else UI.go('asst-result', { animate: false });
-      openFeedback();
     }, 900);
   }
 
@@ -496,6 +499,9 @@ window.Assistant = (function () {
     state.resolvedKeys = resolved;
     state.processLog = keptLog;
     state.multiBundle = isMulti ? bundle : null;
+    state.feedbackDone = false;
+    state.feedbackReportUrl = '';
+    state.feedback = '';
 
     var subText = isMulti
       ? '同时诊断 ' + targets.length + ' 个商户：' + targets.map(function (m) { return m.name; }).join('、')
@@ -670,7 +676,7 @@ window.Assistant = (function () {
 
   function detailCollapse(result, mch) {
     return '<details class="collapse">' +
-      '<summary>完整排查明细（5 项）' +
+      '<summary>完整排查明细（' + MSS.STEPS.length + ' 项）' +
         tip('诊断引擎按风控→资质→结算配置→出款批次→分账顺序排查。异常项已置顶；完成后可重新诊断未执行项。') +
         '<span class="caret">▾</span></summary>' +
       '<div class="cp-body">' + detailRows(result, mch) + '</div></details>';
@@ -722,7 +728,7 @@ window.Assistant = (function () {
 
   function merchantResultBrief(result) {
     var abns = allAbnormals(result);
-    if (!abns.length) return '5 项排查均正常，暂未发现异常';
+    if (!abns.length) return MSS.STEPS.length + ' 项排查均正常，暂未发现异常';
     if (abns.length === 1) return abns[0].summary;
     return '发现 ' + abns.length + ' 项异常：' + abns.map(function (s) { return s.name; }).join('、');
   }
@@ -799,7 +805,7 @@ window.Assistant = (function () {
         '<div class="result-head">' +
           '<div class="result-icon ok">✓</div>' +
           '<h2>暂未发现异常</h2>' +
-          '<p>5 项排查均正常' +
+          '<p>' + MSS.STEPS.length + ' 项排查均正常' +
             (state.resolvedKeys.length ? '（含已自助恢复项）' : '') +
             '，资金可能仍在银行处理中。<br>建议 2 小时后再次查看账户余额与结算记录。</p>' +
         '</div>';
@@ -878,8 +884,10 @@ window.Assistant = (function () {
     var later = el.querySelector('[data-act="later"]');
     if (later) later.onclick = function () {
       MSS.track('点击稍后查看', '诊断结论：未发现异常');
-      UI.toast('已记录，稍后可在助手首页再次诊断');
-      setTimeout(function () { UI.go(cfg.homeView, { reset: true }); }, 900);
+      exitDiagnosisReport(function () {
+        UI.toast('已记录，稍后可在助手首页再次诊断');
+        setTimeout(function () { UI.go(cfg.homeView, { reset: true }); }, 400);
+      });
     };
 
     var rediag = el.querySelector('[data-act="rediag"]');
@@ -979,7 +987,6 @@ window.Assistant = (function () {
       back.onclick = function () {
         if (window.SettleSettings) SettleSettings.setContext({});
         UI.go('asst-result', { animate: false });
-        openFeedback();
       };
     }
   }
@@ -1144,7 +1151,6 @@ window.Assistant = (function () {
         state.userAction = '已打开「调单详情」后返回';
         MSS.track('自助页面返回', '调单详情');
         UI.go('asst-result', { animate: false });
-        openFeedback();
       };
       el.querySelectorAll('[data-ro-tab]').forEach(function (b) {
         b.onclick = function () {
@@ -1235,7 +1241,6 @@ window.Assistant = (function () {
       state.userAction = '已打开「' + sol.title + '」后返回';
       MSS.track('自助页面返回', sol.title);
       UI.go('asst-result', { animate: false });
-      openFeedback();
     };
     el.querySelector('[data-act="open-ext"]').onclick = function () {
       MSS.track('新窗口打开业务页', sol.url);
@@ -1379,7 +1384,6 @@ window.Assistant = (function () {
       state.userAction = '已打开「' + title + '」后返回';
       MSS.track('自助页面返回', title);
       UI.go('asst-result', { animate: false });
-      openFeedback();
     };
 
     el.querySelector('[data-act="submit"]').onclick = function () {
@@ -1474,7 +1478,6 @@ window.Assistant = (function () {
         UI.toast('设置未修改');
         setTimeout(function () {
           UI.go('asst-result', { animate: false });
-          openFeedback();
         }, 900);
       }
     });
@@ -1483,7 +1486,6 @@ window.Assistant = (function () {
   function bindPage(el, onSubmit) {
     el.querySelector('[data-act="page-back"]').onclick = function () {
       UI.go('asst-result', { animate: false });
-      openFeedback();
     };
     el.querySelector('[data-act="submit"]').onclick = onSubmit;
   }
@@ -1492,12 +1494,68 @@ window.Assistant = (function () {
 
   var REASONS = ['操作后仍未到账', '页面无法提交', '看不懂指引', '不是我遇到的问题', '其他'];
 
-  function openFeedback() {
+  /** 生成/复用本次退出反馈对应的诊断报告链接 */
+  function ensureFeedbackReport(reason) {
+    if (state.feedbackReportUrl) return state.feedbackReportUrl;
+    if (!state.result) return '';
+    var snap = MSS.buildSnapshot(merchant(), state.result, state.userAction);
+    var rec = buildReport({ reason: reason || '商户退出诊断报告' }, snap);
+    state.feedbackReportUrl = MSS.reportStore.url(rec);
+    return state.feedbackReportUrl;
+  }
+
+  function feedbackTrackDetail(resultLabel, extra) {
+    var m = merchant();
+    var bundles = resultBundles();
+    var mchIds = bundles.length > 1
+      ? bundles.map(function (b) { return b.merchant.mchId; }).join(',')
+      : (m.mchId || '');
+    var traceId = (state.result && state.result.traceId) || '';
+    var reportUrl = state.feedbackReportUrl || '';
+    var parts = [
+      '商户号:' + mchIds,
+      '流水号:' + traceId,
+      '报告:' + reportUrl,
+      '反馈结果:' + resultLabel
+    ];
+    if (extra) parts.push(extra);
+    return parts.join(' · ');
+  }
+
+  /**
+   * 退出诊断报告时收集反馈。已反馈过则直接继续离开。
+   * @param {Function} onContinue 反馈完成（或跳过）后的回调，通常返回助手首页
+   */
+  function exitDiagnosisReport(onContinue) {
+    onContinue = onContinue || function () {};
+    if (!state.result || state.feedbackDone) {
+      onContinue();
+      return;
+    }
+    openFeedback({
+      trigger: 'exit',
+      onDone: function (ctx) {
+        state.feedbackDone = true;
+        if (ctx && ctx.stayInFlow) return;
+        onContinue();
+      }
+    });
+  }
+
+  function isOnDiagnosisReport() {
+    var view = document.querySelector('[data-view="asst-result"]');
+    return !!(view && view.classList.contains('is-active') && state.result && !state.feedbackDone);
+  }
+
+  function openFeedback(opts) {
+    opts = opts || {};
     var mk = UI.mask(
       '<div class="sheet">' +
         '<div class="sheet-head"><div><h3>问题解决了吗？' +
-          tip('自助操作完成或中途返回时触发轻量反馈，选择「未解决」可展开原因并一键转人工，反馈结果用于计算自助解决率。') +
-          '</h3><p>' + (state.userAction || '你刚刚查看了自助处理指引') + '</p></div>' +
+          tip('退出诊断报告时收集轻量反馈；埋点记录商户号、诊断流水号、报告链接与已解决/未解决结果，用于计算自助解决率。选择「未解决」可一键转人工。') +
+          '</h3><p>' + (state.userAction
+            ? state.userAction
+            : '你即将离开本次诊断报告，请告诉我们问题是否已解决') + '</p></div>' +
           '<button class="sheet-close">✕</button></div>' +
         '<div class="fb-options">' +
           '<button class="fb-opt solved" data-fb="solved"><span class="em">😀</span>已解决</button>' +
@@ -1512,9 +1570,17 @@ window.Assistant = (function () {
 
     var picked = '', reason = '';
 
-    mk.querySelector('.sheet-close').onclick = function () {
-      MSS.track('反馈弹窗关闭', '未选择');
+    function finish(ctx) {
       UI.close(mk);
+      if (opts.onDone) opts.onDone(ctx || {});
+    }
+
+    mk.querySelector('.sheet-close').onclick = function () {
+      state.feedbackReportUrl = '';
+      ensureFeedbackReport('商户退出诊断报告·未选择');
+      MSS.track('反馈弹窗关闭', feedbackTrackDetail('未选择'));
+      state.feedbackDone = true;
+      finish({ dismissed: true });
     };
 
     mk.querySelectorAll('[data-fb]').forEach(function (b) {
@@ -1537,13 +1603,19 @@ window.Assistant = (function () {
     mk.querySelector('[data-act="submit-fb"]').onclick = function () {
       if (!picked) { UI.toast('请先选择已解决 / 未解决'); return; }
       state.feedback = picked === 'solved' ? '已解决' : '未解决';
-      state.userAction = (state.userAction || '已查看自助指引') + '，反馈「' + state.feedback + '」' +
+      state.userAction = (state.userAction || '已查看诊断报告') + '，反馈「' + state.feedback + '」' +
         (reason ? '（' + reason + '）' : '');
-      MSS.track(picked === 'solved' ? '反馈已解决' : '反馈未解决', reason || '未填写原因');
+      state.feedbackReportUrl = '';
+      ensureFeedbackReport('商户反馈·' + state.feedback);
+      MSS.track(
+        picked === 'solved' ? '反馈已解决' : '反馈未解决',
+        feedbackTrackDetail(state.feedback, reason ? ('原因:' + reason) : '')
+      );
+      state.feedbackDone = true;
       UI.close(mk);
 
       if (picked === 'solved') {
-        var canContinue = state.selfServiceDone && state.result &&
+        var canContinue = !!(state.processLog && state.processLog.length) && state.result &&
           state.result.steps.some(function (s) { return s.status === 'skipped'; });
         if (canContinue) {
           UI.dialog({
@@ -1551,23 +1623,34 @@ window.Assistant = (function () {
             text: '前置异常已自助处理。重新诊断可继续排查此前未执行的后续项，确认是否还有其他导致未到账的原因。',
             cancel: '返回首页',
             ok: '重新诊断',
-            onCancel: function () { UI.go(cfg.homeView, { reset: true }); },
-            onOk: function () { startDiagnose({ redeploy: true }); }
+            onCancel: function () { if (opts.onDone) opts.onDone({}); },
+            onOk: function () {
+              if (opts.onDone) opts.onDone({ stayInFlow: true });
+              startDiagnose({ redeploy: true });
+            }
           });
         } else {
           UI.toast('感谢反馈，问题已记录为自助解决');
-          setTimeout(function () { UI.go(cfg.homeView, { reset: true }); }, 1200);
+          if (opts.onDone) setTimeout(function () { opts.onDone({}); }, 400);
         }
       } else {
         UI.dialog({
           title: '需要人工协助吗？',
           text: '将为你转接人工客服，并同步本次诊断结论与操作记录，无需重复描述问题。',
-          cancel: state.selfServiceDone ? '去重新诊断' : '暂不需要',
+          cancel: (state.processLog && state.processLog.length) ? '去重新诊断' : '暂不需要',
           ok: '联系客服',
           onCancel: function () {
-            if (state.selfServiceDone) startDiagnose({ redeploy: true });
+            if (state.processLog && state.processLog.length) {
+              if (opts.onDone) opts.onDone({ stayInFlow: true });
+              startDiagnose({ redeploy: true });
+            } else if (opts.onDone) {
+              opts.onDone({});
+            }
           },
-          onOk: function () { toAgent({ mode: 'chat', reason: '自助后反馈未解决' }); }
+          onOk: function () {
+            if (opts.onDone) opts.onDone({ stayInFlow: true });
+            toAgent({ mode: 'chat', reason: '退出诊断报告反馈未解决' });
+          }
         });
       }
     };
@@ -1579,7 +1662,7 @@ window.Assistant = (function () {
     return '<div class="snapshot">' +
         '<div class="sn-head">诊断快照（客服工作台同步）' +
           '<span class="badge">已同步</span>' +
-          tip('点击联系客服时自动生成结构化快照：商户号、产品线、诊断流水号、5 项排查结果与用户操作，客服工作台同屏展示，避免重复询问。') +
+          tip('点击联系客服时自动生成结构化快照：商户号、产品线、诊断流水号、' + MSS.STEPS.length + ' 项排查结果与用户操作，客服工作台同屏展示，避免重复询问。') +
         '</div>' +
         '<div class="sn-body">' +
           '<div class="kv"><span class="k">商户号</span><span class="v">' + snap.merchant.mchId + '</span></div>' +
@@ -1684,7 +1767,7 @@ window.Assistant = (function () {
    * 姓名|性别|固定电话|手机|邮箱|地址|公司名称|用户区域|QQ|会员ID|会员类型|扩展信息
    * 每一段单独 UTF-8 urlencode，再用 | 拼接后挂到对话接入地址。
    * 姓名 / 公司名称 = 商户名称；会员ID = 商户号；
-   * 产品线/来源/原因/流水号/结论/报告链接写入「地址」；扩展信息留空。
+   * 地址 = 诊断结论；扩展信息 = 诊断报告链接。
    */
   function buildHjUserData(ctx, snap, reportUrl) {
     var m = merchant();
@@ -1696,40 +1779,33 @@ window.Assistant = (function () {
       bundles.forEach(function (b) { abnCount += allAbnormals(b.result).length; });
       summary = '多商户合并诊断·异常' + abnCount + '项·商户' + bundles.length + '个';
     } else if (snap) {
-      summary = snap.result.primary ? snap.result.primary.summary : '5项排查均正常';
+      summary = snap.result.primary
+        ? snap.result.primary.summary
+        : (MSS.STEPS.length + '项排查均正常');
     } else {
       summary = ctx.reason || '其他问题';
     }
     var mchIds = multi
       ? bundles.map(function (b) { return b.merchant.mchId; }).join(',')
       : (m.mchId || '');
-    var address = [
-      '产品线:' + (multi ? '盛意旺(多商户)' : m.line),
-      '来源:' + (cfg.platform === 'app' ? '盛意旺App' : '公众号'),
-      '原因:' + (ctx.reason || ''),
-      multi
-        ? ('商户号:' + mchIds)
-        : (snap ? ('流水号:' + snap.result.traceId) : ''),
-      '结论:' + summary,
-      '自助记录:' + ((state.processLog || []).length) + '条',
-      '未完成异常:' + ((state.result ? buildMergedDiagnosisPayload().unfinished : []).length) + '项',
-      '报告:' + reportUrl
-    ].filter(Boolean).join(';');
+    var companyName = multi
+      ? (m.name + '等' + bundles.length + '户')
+      : (m.name || '');
 
     // 会员类型：文档约定 1=普通会员，2=代理商；自助服务侧均按普通会员传
     var fields = [
-      multi ? (m.name + '等' + bundles.length + '户') : (m.name || ''),
+      companyName,
       '0',
       '',
       m.phone || '',
       '',
-      address,
-      m.name || '',
+      summary,
+      companyName,
       '',
       '',
       mchIds,
       '1',
-      ''
+      reportUrl || ''
     ];
     return fields.map(function (f) { return encodeURIComponent(f); }).join('|');
   }
@@ -1777,7 +1853,7 @@ window.Assistant = (function () {
       chatText = '【自助诊断】' + m.name + '（商户号 ' + m.mchId + '，' + m.line + '）' +
         (snap
           ? '，诊断流水号 ' + snap.result.traceId +
-            (snap.result.primary ? '，结论：' + snap.result.primary.summary : '，5 项排查均正常')
+            (snap.result.primary ? '，结论：' + snap.result.primary.summary : '，' + MSS.STEPS.length + ' 项排查均正常')
           : '，未执行自助诊断') +
         '。完整报告：' + reportUrl;
     }
@@ -1791,14 +1867,15 @@ window.Assistant = (function () {
         '在线客服（codeKey ' + codeKey + '）· 商户信息已通过 hjUserData 同步，报告链接已复制</div>' +
       '<div class="agent-link">' +
         '<div class="al-head">人工客服会话地址' +
-          tip('按客企汇《用户信息接口 V1.1》，将 hjUserData 拼接到对话接入地址。字段顺序：姓名|性别|固话|手机|邮箱|地址|公司名称|用户区域|QQ|会员ID|会员类型|扩展信息；每项单独 UTF-8 urlencode。姓名取商户名称；商户号写入会员ID；产品线/结论/报告链接等写入地址字段；扩展信息留空。') +
+          tip('按客企汇《用户信息接口 V1.1》，将 hjUserData 拼接到对话接入地址。字段顺序：姓名|性别|固话|手机|邮箱|地址|公司名称|用户区域|QQ|会员ID|会员类型|扩展信息；每项单独 UTF-8 urlencode。姓名/公司名称取商户名称；商户号写入会员ID；地址写入诊断结论；扩展信息仅写入诊断报告链接。') +
           '<span class="al-key">codeKey ' + codeKey + '</span></div>' +
         '<div class="al-base">' + cfg.agentUrl.split('?')[0] + '</div>' +
         '<div class="al-params">' +
           '<div><b>接口</b>hjUserData（客企汇官方）</div>' +
           '<div><b>会员ID</b>' + m.mchId + '</div>' +
-          '<div><b>姓名</b>' + m.name + '</div>' +
-          '<div><b>地址</b>产品线 / 结论 / 报告链接</div>' +
+          '<div><b>姓名 / 公司名称</b>' + m.name + '</div>' +
+          '<div><b>地址</b>诊断结论</div>' +
+          '<div><b>扩展信息</b>诊断报告链接</div>' +
         '</div>' +
         '<details class="al-raw"><summary>查看 hjUserData 字段明细</summary>' +
           '<div class="al-params" style="margin-top:8px">' + hjRows + '</div>' +
@@ -1806,14 +1883,14 @@ window.Assistant = (function () {
         '<button class="btn btn-primary" data-act="open-agent-url">打开人工客服会话</button>' +
       '</div>' +
       '<div class="auto-msg">' +
-        '<div class="am-head">诊断报告独立链接（地址字段 + 剪贴板兜底）' +
-          tip('完整诊断明细放在独立报告页，链接写入 hjUserData 地址字段供客服在工作台查看；同时复制到剪贴板，若客服端未展示该字段，商户可粘贴发送。') +
+        '<div class="am-head">诊断报告独立链接（扩展信息 + 剪贴板兜底）' +
+          tip('完整诊断明细放在独立报告页，链接写入 hjUserData 扩展信息字段供客服在工作台查看；同时复制到剪贴板，若客服端未展示该字段，商户可粘贴发送。') +
           '<span class="am-tag">已复制</span></div>' +
         '<div class="am-card">' +
           '<div class="am-title">' + (bundles.length > 1
             ? '【合并诊断报告】' + bundles.length + ' 个商户'
             : (snap
-              ? '【自助诊断报告】' + (snap.result.primary ? snap.result.primary.summary : '5 项排查均正常')
+              ? '【自助诊断报告】' + (snap.result.primary ? snap.result.primary.summary : MSS.STEPS.length + ' 项排查均正常')
               : '【商户档案】' + m.name + '（' + m.line + '）')) + '</div>' +
           '<div class="am-desc">' + (bundles.length > 1
             ? '含自助过程记录与未完成异常 · 点击查看完整合并报告'
@@ -1884,6 +1961,8 @@ window.Assistant = (function () {
     openMerchantSwitch: openMerchantSwitch,
     startDiagnose: startDiagnose,
     toAgent: toAgent,
+    exitDiagnosisReport: exitDiagnosisReport,
+    isOnDiagnosisReport: isOnDiagnosisReport,
     reset: reset,
     tip: tip,
     icon: icon,

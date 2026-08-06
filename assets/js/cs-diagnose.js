@@ -369,7 +369,7 @@
             }).join('')
           : '<div class="cs-abn okish"><div class="row1"><span class="badge ok">正常</span>' +
               '<span class="title">暂未发现异常</span></div>' +
-              '<div class="detail">5 项排查均正常，资金可能仍在银行处理中，建议告知商户 2 小时后再次查看余额。</div></div>';
+              '<div class="detail">' + MSS.STEPS.length + ' 项排查均正常，资金可能仍在银行处理中，建议告知商户 2 小时后再次查看余额。</div></div>';
 
         var stepsHtml = '<div class="cs-steps">' + r.steps.map(function (st) {
           var cls = st.status === 'abnormal' ? 'bad'

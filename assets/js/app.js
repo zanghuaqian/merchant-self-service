@@ -123,10 +123,17 @@
 
     if (act === 'back-home') {
       e.preventDefault();
-      activeTab = 'assistant';
-      paintTabState();
-      Assistant.renderHome();
-      UI.go('asst-home', { reset: true });
+      var goHome = function () {
+        activeTab = 'assistant';
+        paintTabState();
+        Assistant.renderHome();
+        UI.go('asst-home', { reset: true });
+      };
+      if (Assistant.isOnDiagnosisReport && Assistant.isOnDiagnosisReport()) {
+        Assistant.exitDiagnosisReport(goHome);
+      } else {
+        goHome();
+      }
       return;
     }
 

@@ -121,7 +121,12 @@
   document.querySelectorAll('[data-act="back-asst"]').forEach(function (b) {
     b.onclick = function () {
       if (!isBound()) { UI.go('h5-limited', { reset: true }); return; }
-      UI.go('asst-home', { reset: true });
+      var goHome = function () { UI.go('asst-home', { reset: true }); };
+      if (Assistant.isOnDiagnosisReport && Assistant.isOnDiagnosisReport()) {
+        Assistant.exitDiagnosisReport(goHome);
+      } else {
+        goHome();
+      }
     };
   });
 
