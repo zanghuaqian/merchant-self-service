@@ -256,6 +256,26 @@ window.SettleSettings = (function () {
     bindCommon($('accountBody'));
   }
 
+  function cardNoCompact() {
+    var raw = String((merchant().settlement && merchant().settlement.cardNo) || '121909*****0901');
+    var digits = raw.replace(/[^\d]/g, '');
+    if (digits.length >= 10) {
+      return digits.slice(0, 6) + '*****' + digits.slice(-4);
+    }
+    return raw.replace(/\s/g, '').replace(/\*{2,}/g, '*****');
+  }
+
+  function bankLogoMark() {
+    var name = bankShort();
+    var color = '#e60012';
+    if (name.indexOf('工商') >= 0) color = '#c4161c';
+    else if (name.indexOf('建设') >= 0) color = '#003b8f';
+    else if (name.indexOf('农业') >= 0) color = '#019c54';
+    else if (name.indexOf('中国银行') >= 0 || name === '中行') color = '#a71e32';
+    return '<span class="ssc-logo" style="background:' + color + '" aria-hidden="true">' +
+      name.slice(0, 1) + '</span>';
+  }
+
   /* ------------------------------ 结算设置 ------------------------------ */
 
   function renderSettings(mountId) {
@@ -268,17 +288,33 @@ window.SettleSettings = (function () {
     var mount = $(mountId || 'settleSettingsBody');
     if (!mount) return;
 
+    var m = merchant();
+    var s = m.settlement || {};
+    var cardType = s.cardType || '对公';
+    var acctName = s.accountNameFull || s.accountName || displayName();
+
     var options = CUTOFFS.map(function (c) {
       return '<option value="' + c.value + '"' + (c.value === cfg.cutoff ? ' selected' : '') + '>' +
         c.label + '</option>';
     }).join('');
 
     var tipBanner = context.fromDiagnosis
-      ? '<div class="ss-diag-tip">诊断发现未开启自动结算，请在本页开启「是否自动结算」并保存。</div>'
+      ? '<div class="ss-diag-tip">诊断发现未开启自动结算，请在本页开启「是否自动结算」并保存；也可核对结算卡信息。</div>'
       : '';
 
     mount.innerHTML =
       tipBanner +
+      '<div class="ss-card ss-settle-card">' +
+        '<div class="ssc-title">当前结算卡</div>' +
+        '<div class="ssc-box">' +
+          '<span class="ssc-type">' + cardType + '</span>' +
+          '<div class="ssc-bank">' + bankLogoMark() +
+            '<span>' + bankShort() + '</span></div>' +
+          '<div class="ssc-no">' + cardNoCompact() + '</div>' +
+          '<div class="ssc-name">' + acctName + '</div>' +
+        '</div>' +
+        '<button type="button" class="btn btn-primary ssc-change" data-act="change-settle-card">变更结算卡</button>' +
+      '</div>' +
       '<div class="ss-card">' +
         '<div class="ss-row is-readonly">' +
           '<span class="ss-label">结算周期</span>' +
@@ -604,6 +640,16 @@ window.SettleSettings = (function () {
         MSS.track('进入结算设置', '我的账户');
         renderSettings();
         UI.go('settle-settings', { reset: true });
+      };
+    });
+    root.querySelectorAll('[data-act="change-settle-card"]').forEach(function (b) {
+      b.onclick = function () {
+        MSS.track('结算设置·变更结算卡', '');
+        if (typeof context.onChangeCard === 'function') {
+          context.onChangeCard();
+          return;
+        }
+        toast('演示：跳转结算卡变更页');
       };
     });
     root.querySelectorAll('[data-act="open-self-settle"]').forEach(function (b) {

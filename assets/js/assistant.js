@@ -945,6 +945,12 @@ window.Assistant = (function () {
         fromDiagnosis: true,
         onComplete: function (msg) {
           afterSelfServiceSuccess(msg || '已完成结算设置', '设置已生效，可返回查看诊断结果');
+        },
+        onChangeCard: function () {
+          renderCardChangePage(
+            { key: 'payout', name: '结算卡', summary: '从结算设置发起变更', solution: MSS.SOLUTIONS.card || MSS.SOLUTIONS.payout_card },
+            MSS.SOLUTIONS.card || MSS.SOLUTIONS.payout_card
+          );
         }
       });
       SettleSettings.renderSettings();
@@ -959,9 +965,6 @@ window.Assistant = (function () {
     var el = cfg.root.querySelector('[data-view="asst-page"]');
     var mountId = 'mpSettleMount';
     el.innerHTML = nativePageChrome('结算设置', { backAct: 'page-back' }) +
-      '<div class="mp-settle-banner">小程序 · 结算设置' +
-        tip('公众号诊断命中「未开自动提现」时，引导打开微信小程序结算设置页，商户可开启自动结算或发起自助结算。') +
-      '</div>' +
       '<div class="settle-body" id="' + mountId + '"></div>';
 
     if (window.SettleSettings) {
@@ -974,6 +977,12 @@ window.Assistant = (function () {
         embed: true,
         onComplete: function (msg) {
           afterSelfServiceSuccess(msg || '已在小程序结算设置中完成处理', '设置已保存');
+        },
+        onChangeCard: function () {
+          renderCardChangePage(
+            { key: 'payout', name: '结算卡', summary: '从结算设置发起变更', solution: MSS.SOLUTIONS.card || MSS.SOLUTIONS.payout_card },
+            MSS.SOLUTIONS.card || MSS.SOLUTIONS.payout_card
+          );
         }
       });
       SettleSettings.renderSettings(mountId);
